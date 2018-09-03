@@ -51,6 +51,8 @@ class CaptionModel(nn.Module):
                  device):
 
         super().__init__()
+        self.device = device
+
         self.target_vocab_size = target_vocab_size
 
         self.encoder = EncoderCNN(embedding_size).to(device)
@@ -60,11 +62,11 @@ class CaptionModel(nn.Module):
 
     def forward(self,images, captions, caption_lengths):
         # Encode
-        h0 = self.encoder(images).to(device)
+        h0 = self.encoder(images).to(self.device)
 
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
-        c0 = torch.zeros(h0.shape).to(device)
+        c0 = torch.zeros(h0.shape).to(self.device)
         hidden_state = (h0,c0)
 
         # Decode
