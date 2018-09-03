@@ -8,7 +8,7 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-	self.device = device
+        self.device = device
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]
         self.resnet = nn.Sequential(*modules)
@@ -19,7 +19,7 @@ class EncoderCNN(nn.Module):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
             out = self.resnet
-	out = out.to(self.device())
+        out = out.to(self.device())
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
@@ -73,13 +73,13 @@ class CaptionModel(nn.Module):
 
         # Decode
         batch_size, max_sent_len = captions.shape
-	batch_size = batch_size.to(self.device)
-	max_sent_len = max_sent_len.to(self.device)
+        batch_size = batch_size.to(self.device)
+        max_sent_len = max_sent_len.to(self.device)
         out = torch.zeros((batch_size)).to(self.device)
         for w_idx in range(max_sent_len-1):
             prediction, hidden_state = self.decoder(captions[:,w_idx].view(-1,1), hidden_state)
-	    prediction.to(self.device)
-	    hidden_state.to(self.device)
+        prediction.to(self.device)
+        hidden_state.to(self.device)
             out += self.loss(prediction.squeeze(0), captions[:,w_idx+1])
 
         #normalize loss
