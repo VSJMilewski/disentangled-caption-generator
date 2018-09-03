@@ -60,11 +60,11 @@ class CaptionModel(nn.Module):
 
     def forward(self,images, captions, caption_lengths):
         # Encode
-        h0 = self.encoder(images)
+        h0 = self.encoder(images).to(device)
 
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
-        c0 = torch.zeros(h0.shape)
+        c0 = torch.zeros(h0.shape).to(device)
         hidden_state = (h0,c0)
 
         # Decode

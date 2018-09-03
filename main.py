@@ -111,7 +111,7 @@ testdata = data(base_path_images, test_images, annotations, max_sentence_length,
 
 #create the models
 print('create model...')
-caption_model = CaptionModel(embedding_size, vocab_size, device)
+caption_model = CaptionModel(embedding_size, vocab_size, device).to(device)
 caption_model.train(True) #probably not needed. better to be safe
 opt = SGD(caption_model.parameters(), lr=learning_rate)
 
