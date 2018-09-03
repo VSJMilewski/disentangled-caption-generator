@@ -1,0 +1,10 @@
+/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/functional.py:52: UserWarning: size_average and reduce args will be deprecated, please use reduction='none' instead.
+  warnings.warn(warning.format(ret))
+Traceback (most recent call last):
+  File "/home/milewgpu/multimodal-descriptions/main.py", line 133, in <module>
+    loss = caption_model(image, caption, caption_lengths)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/module.py", line 477, in __call__
+    result = self.forward(*input, **kwargs)
+  File "/home/milewgpu/multimodal-descriptions/model.py", line 63, in forward
+    h0 = self.encoder(images).to(device)
+NameError: name 'device' is not defined

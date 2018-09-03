@@ -6,8 +6,9 @@ from torchvision import models
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, embedding_size):
+    def __init__(self, embedding_size, device):
         super().__init__()
+	self.device = device
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]
         self.resnet = nn.Sequential(*modules)
@@ -17,7 +18,8 @@ class EncoderCNN(nn.Module):
     def forward(self, x):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
-            out = self.resnet(x)
+            out = self.resnet
+	out = out.to(self.device())
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
@@ -55,7 +57,7 @@ class CaptionModel(nn.Module):
 
         self.target_vocab_size = target_vocab_size
 
-        self.encoder = EncoderCNN(embedding_size).to(device)
+        self.encoder = EncoderCNN(embedding_size,device).to(device)
         self.decoder = Decoder(target_vocab_size,embedding_size).to(device)
 
         self.loss = nn.CrossEntropyLoss(ignore_index=0, reduce=False).to(device)
@@ -67,13 +69,17 @@ class CaptionModel(nn.Module):
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
         c0 = torch.zeros(h0.shape).to(self.device)
-        hidden_state = (h0,c0)
+        hidden_state = (h0,c0).to(self.device)
 
         # Decode
         batch_size, max_sent_len = captions.shape
-        out = torch.zeros((batch_size))
+	batch_size = batch_size.to(self.device)
+	max_sent_len = max_sent_len.to(self.device)
+        out = torch.zeros((batch_size)).to(self.device)
         for w_idx in range(max_sent_len-1):
             prediction, hidden_state = self.decoder(captions[:,w_idx].view(-1,1), hidden_state)
+	    prediction.to(self.device)
+	    hidden_state.to(self.device)
             out += self.loss(prediction.squeeze(0), captions[:,w_idx+1])
 
         #normalize loss
