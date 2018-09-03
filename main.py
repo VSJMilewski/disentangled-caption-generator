@@ -27,10 +27,10 @@ from torchvision import models
 # from pycocoevalcap.eval import COCOEvalCap
 
 # packages for plotting
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import skimage.io as io
-import seaborn
-import pylab
 
 # additional stuff
 import pickle
@@ -53,7 +53,8 @@ from flickr8k_data_processor import *
 
 #test if there is a gpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu') # uncomment if cuda does not work
+#device = torch.device('cpu') # uncomment if cuda does not work
+print(device)
 
 #hyper parameters
 PAD = '<PAD>'
@@ -100,7 +101,7 @@ with open(home+'/multimodal-descriptions/data/flickr8k/Flickr8k.token.txt') as f
 print('create/open vocabulary')
 dev_processor = DataProcessor(annotations, dev_images, filename=home+'/multimodal-descriptions/dev_flickr8k_vocab_'+str(vocab_size)+'.pkl', vocab_size=vocab_size)
 dev_processor.save()
-processor = DataProcessor(annotations, train_images, filename=home+'/multimodal-descriptions/train_flickr8k_vocab_'+str(vocab_size)_'.pkl',vocab_size=vocab_size)
+processor = DataProcessor(annotations, train_images, filename=home+'/multimodal-descriptions/train_flickr8k_vocab_'+str(vocab_size)+'.pkl',vocab_size=vocab_size)
 processor.save()
 
 print('create data processing objects...')

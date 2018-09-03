@@ -1,0 +1,24 @@
+/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/rnn.py:38: UserWarning: dropout option adds dropout after all but last recurrent layer, so non-zero dropout expects num_layers greater than 1, but got dropout=0.1 and num_layers=1
+  "num_layers={}".format(dropout, num_layers))
+/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/functional.py:52: UserWarning: size_average and reduce args will be deprecated, please use reduction='none' instead.
+  warnings.warn(warning.format(ret))
+Traceback (most recent call last):
+  File "/home/milewgpu/multimodal-descriptions/main.py", line 133, in <module>
+    loss = caption_model(image, caption, caption_lengths)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/module.py", line 477, in __call__
+    result = self.forward(*input, **kwargs)
+  File "/home/milewgpu/multimodal-descriptions/model.py", line 74, in forward
+    prediction, hidden_state = self.decoder(captions[:,w_idx].view(-1,1), hidden_state)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/module.py", line 477, in __call__
+    result = self.forward(*input, **kwargs)
+  File "/home/milewgpu/multimodal-descriptions/model.py", line 42, in forward
+    lstm_output, hidden = self.LSTM(emb, hidden_input)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/module.py", line 477, in __call__
+    result = self.forward(*input, **kwargs)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/modules/rnn.py", line 192, in forward
+    output, hidden = func(input, self.all_weights, hx, batch_sizes)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/_functions/rnn.py", line 324, in forward
+    return func(input, *fargs, **fkwargs)
+  File "/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/_functions/rnn.py", line 288, in forward
+    dropout_ts)
+RuntimeError: CuDNN error: CUDNN_STATUS_EXECUTION_FAILED

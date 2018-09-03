@@ -1,0 +1,4 @@
+  File "/home/milewgpu/multimodal-descriptions/main.py", line 103
+    processor = DataProcessor(annotations, train_images, filename=home+'/multimodal-descriptions/train_flickr8k_vocab_'+str(vocab_size)_'.pkl',vocab_size=vocab_size)
+                                                                                                                                       ^
+SyntaxError: invalid syntax
