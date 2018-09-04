@@ -19,7 +19,7 @@ class EncoderCNN(nn.Module):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
             out = self.resnet
-        out = out.to(self.device())
+        out = out.to(self.device)
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
@@ -80,7 +80,7 @@ class CaptionModel(nn.Module):
             prediction, hidden_state = self.decoder(captions[:,w_idx].view(-1,1), hidden_state)
         prediction.to(self.device)
         hidden_state.to(self.device)
-            out += self.loss(prediction.squeeze(0), captions[:,w_idx+1])
+        out += self.loss(prediction.squeeze(0), captions[:,w_idx+1])
 
         #normalize loss
         out = torch.mean(torch.div(out,caption_lengths))  # the loss is the average of losses, so divide over number of words in each sentence

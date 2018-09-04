@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/home/milewgpu/multimodal-descriptions/main.py", line 49, in <module>
-    from model import *
-  File "/home/milewgpu/multimodal-descriptions/model.py", line 11
-    self.device = device
-                       ^
-TabError: inconsistent use of tabs and spaces in indentation
