@@ -10,9 +10,9 @@ class EncoderCNN(nn.Module):
         super().__init__()
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]
-        self.resnet = nn.Sequential(*modules).to(device)
-        self.linear = nn.Linear(resnet.fc.in_features, embedding_size).to(device)
-        self.batchnorm = nn.BatchNorm1d(embedding_size).to(device)
+        self.resnet = nn.Sequential(*modules).cuda()
+        self.linear = nn.Linear(resnet.fc.in_features, embedding_size).cuda()
+        self.batchnorm = nn.BatchNorm1d(embedding_size).cuda()
 
     def forward(self, x):
         # the resnet is pretrained, so turn of the gradient
@@ -55,10 +55,10 @@ class CaptionModel(nn.Module):
 
         self.target_vocab_size = target_vocab_size
 
-        self.encoder = EncoderCNN(embedding_size,device).to(device)
-        self.decoder = Decoder(target_vocab_size,embedding_size).to(device)
+        self.encoder = EncoderCNN(embedding_size,device).cuda()
+        self.decoder = Decoder(target_vocab_size,embedding_size).cuda()
 
-        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduce=False).to(device)
+        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduce=False).cuda()
 
     def forward(self,images, captions, caption_lengths):
         # Encode
@@ -67,17 +67,13 @@ class CaptionModel(nn.Module):
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
         c0 = torch.zeros(h0.shape).to(self.device)
-        hidden_state = (h0,c0).to(self.device)
+        hidden_state = (h0,c0)
 
         # Decode
         batch_size, max_sent_len = captions.shape
-        batch_size = batch_size.to(self.device)
-        max_sent_len = max_sent_len.to(self.device)
         out = torch.zeros((batch_size)).to(self.device)
         for w_idx in range(max_sent_len-1):
             prediction, hidden_state = self.decoder(captions[:,w_idx].view(-1,1), hidden_state)
-        prediction.to(self.device)
-        hidden_state.to(self.device)
         out += self.loss(prediction.squeeze(0), captions[:,w_idx+1])
 
         #normalize loss
