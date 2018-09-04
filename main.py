@@ -138,8 +138,8 @@ for epoch in range(max_epochs):
     caption_model.train(False)
     #create validation result file
     print('validation...')
-    encoder = caption_model.encoder
-    decoder = caption_model.decoder
+    encoder = caption_model.encoder.cuda()
+    decoder = caption_model.decoder.cuda()
 
     predicted_sentences = dict()
     for image,caption,length,image_name in batch_generator(devdata,1,transform):
@@ -148,7 +148,7 @@ for epoch in range(max_epochs):
 
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
-        c0 = torch.zeros(h0.shape)
+        c0 = torch.zeros(h0.shape).cuda()
         hidden_state = (h0,c0)
 
         # Decode
