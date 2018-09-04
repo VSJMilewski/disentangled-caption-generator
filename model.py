@@ -8,18 +8,16 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-        self.device = device
         resnet = models.resnet152(pretrained=True)
         modules = list(resnet.children())[:-1]
-        self.resnet = nn.Sequential(*modules)
-        self.linear = nn.Linear(resnet.fc.in_features, embedding_size)
-        self.batchnorm = nn.BatchNorm1d(embedding_size)
+        self.resnet = nn.Sequential(*modules).to(device)
+        self.linear = nn.Linear(resnet.fc.in_features, embedding_size).to(device)
+        self.batchnorm = nn.BatchNorm1d(embedding_size).to(device)
 
     def forward(self, x):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
-            out = self.resnet
-        out = out.to(self.device)
+            out = self.resnet(x)
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
