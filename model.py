@@ -9,9 +9,10 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-        inception = models.inception_v3(pretrained=True, aux_logits=False)
+        inception = models.inception_v3(pretrained=True)
         modules = list(inception.children())[:-1] #remove te decision layer
         self.inception = nn.Sequential(*modules).to(device)
+        self.inception.aux_logits=False
         for param in self.inception.parameters():
             param.requires_grad = False
         self.linear = nn.Linear(inception.fc.in_features, embedding_size) #make sure an vector of the embedding size is created
