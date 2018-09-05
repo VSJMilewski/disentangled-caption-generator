@@ -35,7 +35,7 @@ class data():
         return samples
 
 
-def batch_generator(data, batch_size, image_transform, seed=42, device):
+def batch_generator(data, batch_size, image_transform, device, seed=42):
     keys = list(data.samples.keys())
     random.Random(seed).shuffle(keys)
     current_id = 0

@@ -125,7 +125,7 @@ print('training...')
 for epoch in range(max_epochs):
     print('epoch %d'%epoch)
     #loop over all the training batches
-    for i_batch, batch in enumerate(batch_generator(traindata,batch_size,transform)):
+    for i_batch, batch in enumerate(batch_generator(traindata,batch_size,transform, device)):
         image, caption, caption_lengths,_ = batch
         image = image.to(device)
         caption = caption.to(device)
@@ -142,7 +142,7 @@ for epoch in range(max_epochs):
     decoder = caption_model.decoder.cuda()
 
     predicted_sentences = dict()
-    for image,caption,length,image_name in batch_generator(devdata,1,transform):
+    for image,caption,length,image_name in batch_generator(devdata,1,transform, device):
         # Encode
         h0 = encoder(image)
 
