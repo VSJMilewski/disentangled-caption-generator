@@ -88,31 +88,31 @@ transform_eval = transforms.Compose([
 
 #setup data stuff
 print('reading data files...')
-base_path_images = 'data/flickr8k/Flicker8k_Dataset/'
-reference_file = 'data/flickr8k/Flickr8k_references.json'
+base_path_images = './data/flickr8k/Flicker8k_Dataset/'
+reference_file = './data/flickr8k/Flickr8k_references.json'
 train_images = None
 dev_images = None
 test_images = None
 annotations = None
-with open('data/flickr8k/Flickr_8k.trainImages.txt') as f:
+with open('./data/flickr8k/Flickr_8k.trainImages.txt') as f:
     train_images = f.read().splitlines()
-with open('data/flickr8k/Flickr_8k.devImages.txt') as f:
+with open('./data/flickr8k/Flickr_8k.devImages.txt') as f:
     dev_images = f.read().splitlines()
-with open('data/flickr8k/Flickr_8k.testImages.txt') as f:
+with open('./data/flickr8k/Flickr_8k.testImages.txt') as f:
     test_images = f.read().splitlines()
-with open('data/flickr8k/Flickr8k.token.txt') as f:
+with open('./data/flickr8k/Flickr8k.token.txt') as f:
     annotations = f.read().splitlines()
 
 print('create/open vocabulary')
-dev_processor = DataProcessor(annotations, dev_images, filename='dev_flickr8k_vocab_'+str(vocab_size)+'.pkl', vocab_size=vocab_size)
+dev_processor = DataProcessor(annotations, dev_images, filename='./dev_flickr8k_vocab_'+str(vocab_size)+'.pkl', vocab_size=vocab_size)
 dev_processor.save()
-processor = DataProcessor(annotations, train_images, filename='train_flickr8k_vocab_'+str(vocab_size)+'.pkl',vocab_size=vocab_size)
+processor = DataProcessor(annotations, train_images, filename='./train_flickr8k_vocab_'+str(vocab_size)+'.pkl',vocab_size=vocab_size)
 processor.save()
 
 print('create data processing objects...')
-traindata = data(base_path_images, train_images, annotations, max_sentence_length, processor, 'data_flickr8k_train.pkl', START, END)
-devdata = data(base_path_images, dev_images, annotations, max_sentence_length, processor, 'data_flickr8k_dev.pkl', START, END)
-testdata = data(base_path_images, test_images, annotations, max_sentence_length, processor, 'data_flickr8k_test.pkl', START, END)
+traindata = data(base_path_images, train_images, annotations, max_sentence_length, processor, './data_flickr8k_train.pkl', START, END)
+devdata = data(base_path_images, dev_images, annotations, max_sentence_length, processor, './data_flickr8k_dev.pkl', START, END)
+testdata = data(base_path_images, test_images, annotations, max_sentence_length, processor, './data_flickr8k_test.pkl', START, END)
 
 #create the models
 print('create model...')
@@ -187,7 +187,7 @@ for epoch in range(max_epochs):
 
     score = evaluate(prediction_file, reference_file)
     scores.append(score)
-    torch.save(caption_model.state_dict(), 'output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+    torch.save(caption_model.state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
     if len(scores) >= 1:
         if scores[-1]['Bleu_4'] <= best_bleu:
             number_up += 1
@@ -195,12 +195,12 @@ for epoch in range(max_epochs):
                 print('Finished training!')
                 break
         else:
-            torch.save(caption_model.state_dict(), 'output/best_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+            torch.save(caption_model.state_dict(), './output/best_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
             best_bleu = scores[-1]['Bleu_4']
 
     caption_model.train()
 
-pickle.dump(scores, open('output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
-pickle.dump(losses, open('output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
+pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
+pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
 
 torch.save(caption_model.state_dict(), last_model_file_name)
