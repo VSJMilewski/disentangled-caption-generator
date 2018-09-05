@@ -15,15 +15,16 @@ class EncoderCNN(nn.Module):
         self.inception.aux_logits=False
         for param in self.inception.parameters():
             param.requires_grad = False
-        self.linear = nn.Linear(inception.fc.in_features, embedding_size) #make sure an vector of the embedding size is created
-        self.batchnorm = nn.BatchNorm1d(embedding_size)
+        self.inception.fc = nn.Linear(self.inception.fc.in_features, embedding_size)
+        self.inception.fc.requires_grad = True
+        # self.linear = nn.Linear(inception.fc.in_features, embedding_size) #make sure an vector of the embedding size is created
+        # self.batchnorm = nn.BatchNorm1d(embedding_size)
 
     def forward(self, x):
         # the cnn is pretrained, so turn of the gradient
         out = self.inception(x)
-        x = Variable(x.data) #set this as start for grad
-        out = out.reshape(out.size(0), -1)
-        out = self.linear(out)
+        # out = out.reshape(out.size(0), -1)
+        # out = self.linear(out)
         return out
 
 class Decoder(nn.Module):
