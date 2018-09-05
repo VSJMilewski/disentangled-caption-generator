@@ -17,7 +17,7 @@ class EncoderCNN(nn.Module):
     def forward(self, x):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
-            out = self.resnet(x)
+            out = self.inception(x)
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
