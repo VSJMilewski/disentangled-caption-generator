@@ -71,8 +71,8 @@ embedding_size = 512
 
 patience = 10
 
-resize_size = 256
-crop_size = 224
+resize_size = int(299/224*256)
+crop_size = 299
 transform_train = transforms.Compose([
                   transforms.RandomResizedCrop(crop_size),
                   transforms.RandomHorizontalFlip(),
