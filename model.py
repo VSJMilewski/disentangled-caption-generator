@@ -8,7 +8,7 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-        self.inception = models.inception_v3(pretrained=True)
+        inception = models.inception_v3(pretrained=True)
         modules = list(inception.children())[:-1]
         self.inception = nn.Sequential(*modules).to(device)
         self.linear = nn.Linear(resnet.fc.in_features, embedding_size)
