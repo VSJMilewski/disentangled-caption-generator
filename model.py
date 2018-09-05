@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 from torch.optim import SGD
 from torchvision import models
 
@@ -9,18 +10,19 @@ class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
         inception = models.inception_v3(pretrained=True)
-        modules = list(inception.children())[:-1]
+        modules = list(inception.children())[:-1] #remove te decision layer
         self.inception = nn.Sequential(*modules).to(device)
-        self.linear = nn.Linear(inception.fc.in_features, embedding_size)
+        for param in self.inception.parameters():
+            param.requires_grad = False
+        self.linear = nn.Linear(inception.fc.in_features, embedding_size) #make sure an vector of the embedding size is created
         self.batchnorm = nn.BatchNorm1d(embedding_size)
 
     def forward(self, x):
-        # the resnet is pretrained, so turn of the gradient
-        with torch.no_grad():
-            out = self.inception(x)
+        # the cnn is pretrained, so turn of the gradient
+        out = self.inception(x)
+        x = Variable(x.data) #set this as start for grad
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
-        out = self.batchnorm(out)
         return out
 
 class Decoder(nn.Module):
