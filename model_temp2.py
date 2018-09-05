@@ -8,15 +8,15 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-        self.inception = models.inception_v3(pretrained=True)
-        self.inception = nn.Sequential(*modules).to(device)
-        self.linear = nn.Linear(resnet.fc.in_features, embedding_size)
-        self.batchnorm = nn.BatchNorm1d(embedding_size)
+        inception = models.inception_v3(pretrained=True)
+        self.inception = nn.Sequential(*modules).cuda()
+        self.linear = nn.Linear(resnet.fc.in_features, embedding_size).cuda()
+        self.batchnorm = nn.BatchNorm1d(embedding_size).cuda()
 
     def forward(self, x):
         # the resnet is pretrained, so turn of the gradient
         with torch.no_grad():
-            out = self.resnet(x)
+            out = self.inception(x)
         out = out.reshape(out.size(0), -1)
         out = self.linear(out)
         out = self.batchnorm(out)
@@ -53,14 +53,15 @@ class CaptionModel(nn.Module):
         self.device = device
 
         self.target_vocab_size = target_vocab_size
-        self.encoder = EncoderCNN(embedding_size,device).to(device)
-        self.decoder = Decoder(target_vocab_size,embedding_size).to(device)
 
-        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduce=False).to(device)
+        self.encoder = EncoderCNN(embedding_size,device).cuda()
+        self.decoder = Decoder(target_vocab_size,embedding_size).cuda()
+
+        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduce=False).cuda()
 
     def forward(self,images, captions, caption_lengths):
         # Encode
-        h0 = self.encoder(images)
+        h0 = self.encoder(images).to(self.device)
 
         #prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)

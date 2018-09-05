@@ -35,7 +35,7 @@ class data():
         return samples
 
 
-def batch_generator(data, batch_size, image_transform, seed=42):
+def batch_generator(data, batch_size, image_transform, seed=42, device):
     keys = list(data.samples.keys())
     random.Random(seed).shuffle(keys)
     current_id = 0
@@ -61,11 +61,12 @@ def batch_generator(data, batch_size, image_transform, seed=42):
             batch_images += [image_transform(image)]*5
             current_id += 1
 
-        batch_im  = torch.stack(batch_images,dim=0)
         batch_cap = np.zeros([len(batch_captions), data.max_length])
         for j,cap in enumerate(batch_captions):
             batch_cap[j, :len(cap)] = cap
-        batch_cap = torch.from_numpy(batch_cap).type(torch.LongTensor)
-        lengths = torch.FloatTensor(lengths)
+
+        batch_im  = torch.stack(batch_images,dim=0).to(device)
+        batch_cap = torch.from_numpy(batch_cap).type(torch.LongTensor).to(device)
+        lengths = torch.FloatTensor(lengths).to(device)
 
         yield (batch_im, batch_cap, lengths, image_names)
