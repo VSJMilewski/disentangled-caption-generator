@@ -161,7 +161,7 @@ for epoch in range(max_epochs):
         start_token = torch.LongTensor([processor.w2i[START]]).to(device)
         predicted_words = []
         prediction = start_token.view(1,1)
-        for w_idx in range(max_sent_len):
+        for w_idx in range(max_sentence_length):
             prediction, hidden_state = self.decoder(prediction, hidden_state)
 
             index_predicted_word = np.argmax(prediction.detach().numpy(), axis=2)[0][0]
