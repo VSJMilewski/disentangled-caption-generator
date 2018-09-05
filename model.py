@@ -9,9 +9,9 @@ from torchvision import models
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
         super().__init__()
-        inception = models.inception_v3(pretrained=True)
-        modules = list(inception.children())[:-1] #remove te decision layer
-        self.inception = nn.Sequential(*modules).to(device)
+        self.inception = models.inception_v3(pretrained=True)
+        # modules = list(inception.children())[:-1] #remove te decision layer
+        # self.inception = nn.Sequential(*modules).to(device)
         self.inception.aux_logits=False
         for param in self.inception.parameters():
             param.requires_grad = False
