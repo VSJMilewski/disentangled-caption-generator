@@ -38,8 +38,6 @@ from collections import Counter
 from collections import defaultdict
 import os
 from datetime import datetime
-from pathlib import Path
-home = str(Path.home())
 
 import json
 from json import encoder
@@ -73,41 +71,48 @@ embedding_size = 512
 
 patience = 10
 
+resize_size = 256
 crop_size = 224
-transform = transforms.Compose([
-            transforms.RandomResizedCrop(crop_size),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406),
-                                 (0.229, 0.224, 0.225))])
+transform_train = transforms.Compose([
+                  transforms.RandomResizedCrop(crop_size),
+                  transforms.RandomHorizontalFlip(),
+                  transforms.ToTensor(),
+                  transforms.Normalize((0.485, 0.456, 0.406),
+                                       (0.229, 0.224, 0.225))])
+transform_eval = transforms.Compose([
+                 transforms.Resize(resize_size),
+                 transforms.CenterCrop(crop_size),
+                 transforms.ToTensor(),
+                 transforms.Normalize((0.485, 0.456, 0.406),
+                                      (0.229, 0.224, 0.225))])
 
 #setup data stuff
 print('reading data files...')
-base_path_images = home+'/multimodal-descriptions/data/flickr8k/Flicker8k_Dataset/'
-reference_file = home+'/multimodal-descriptions/data/flickr8k/Flickr8k_references.json'
+base_path_images = 'data/flickr8k/Flicker8k_Dataset/'
+reference_file = 'data/flickr8k/Flickr8k_references.json'
 train_images = None
 dev_images = None
 test_images = None
 annotations = None
-with open(home+'/multimodal-descriptions/data/flickr8k/Flickr_8k.trainImages.txt') as f:
+with open('data/flickr8k/Flickr_8k.trainImages.txt') as f:
     train_images = f.read().splitlines()
-with open(home+'/multimodal-descriptions/data/flickr8k/Flickr_8k.devImages.txt') as f:
+with open('data/flickr8k/Flickr_8k.devImages.txt') as f:
     dev_images = f.read().splitlines()
-with open(home+'/multimodal-descriptions/data/flickr8k/Flickr_8k.testImages.txt') as f:
+with open('data/flickr8k/Flickr_8k.testImages.txt') as f:
     test_images = f.read().splitlines()
-with open(home+'/multimodal-descriptions/data/flickr8k/Flickr8k.token.txt') as f:
+with open('data/flickr8k/Flickr8k.token.txt') as f:
     annotations = f.read().splitlines()
 
 print('create/open vocabulary')
-dev_processor = DataProcessor(annotations, dev_images, filename=home+'/multimodal-descriptions/dev_flickr8k_vocab_'+str(vocab_size)+'.pkl', vocab_size=vocab_size)
+dev_processor = DataProcessor(annotations, dev_images, filename='dev_flickr8k_vocab_'+str(vocab_size)+'.pkl', vocab_size=vocab_size)
 dev_processor.save()
-processor = DataProcessor(annotations, train_images, filename=home+'/multimodal-descriptions/train_flickr8k_vocab_'+str(vocab_size)+'.pkl',vocab_size=vocab_size)
+processor = DataProcessor(annotations, train_images, filename='train_flickr8k_vocab_'+str(vocab_size)+'.pkl',vocab_size=vocab_size)
 processor.save()
 
 print('create data processing objects...')
-traindata = data(base_path_images, train_images, annotations, max_sentence_length, processor, home+'/multimodal-descriptions/data_flickr8k_train.pkl', START, END)
-devdata = data(base_path_images, dev_images, annotations, max_sentence_length, processor, home+'/multimodal-descriptions/data_flickr8k_dev.pkl', START, END)
-testdata = data(base_path_images, test_images, annotations, max_sentence_length, processor, home+'/multimodal-descriptions/data_flickr8k_test.pkl', START, END)
+traindata = data(base_path_images, train_images, annotations, max_sentence_length, processor, 'data_flickr8k_train.pkl', START, END)
+devdata = data(base_path_images, dev_images, annotations, max_sentence_length, processor, 'data_flickr8k_dev.pkl', START, END)
+testdata = data(base_path_images, test_images, annotations, max_sentence_length, processor, 'data_flickr8k_test.pkl', START, END)
 
 #create the models
 print('create model...')
@@ -117,6 +122,7 @@ opt = SGD(caption_model.parameters(), lr=learning_rate)
 
 losses = []
 scores = []
+best_bleu = 0
 number_up = 0
 opt.zero_grad()
 
@@ -135,9 +141,9 @@ for epoch in range(max_epochs):
         losses.append(float(loss))
         opt.step()
 
-    caption_model.train(False)
     #create validation result file
     print('validation...')
+    caption_model.eval()
     encoder = caption_model.encoder.cuda()
     decoder = caption_model.decoder.cuda()
 
@@ -172,7 +178,7 @@ for epoch in range(max_epochs):
 
     #perform validation
     timestamp = datetime.now()
-    prediction_file = home+'/multimodal-descriptions/data/prediction/dev_epoch_{}_baseline_t_{:%m_%d_%H_%M}.pred'.format(epoch, timestamp)
+    prediction_file = 'data/prediction/dev_epoch_{}_baseline_t_{:%m_%d_%H_%M}.pred'.format(epoch, timestamp)
     with open(prediction_file, 'w', encoding='utf-8') as f:
         for im, p in predicted_sentences.items():
             if p[-1] == END:
@@ -181,16 +187,20 @@ for epoch in range(max_epochs):
 
     score = evaluate(prediction_file, reference_file)
     scores.append(score)
+    torch.save(caption_model.state_dict(), 'output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
     if len(scores) >= 1:
-        if scores[-1]['Bleu_4'] < scores[-2]['Bleu_4']:
+        if scores[-1]['Bleu_4'] <= best_bleu:
             number_up += 1
             if number_up > patience:
                 print('Finished training!')
                 break
-    caption_model.train(True)
+        else:
+            torch.save(caption_model.state_dict(), 'output/best_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+            best_bleu = scores[-1]['Bleu_4']
 
-pickle.dump(scores, open(home+'/multimodal-descriptions/scores_flickr8k_baseline_model_last-epoch_{}_t_{:%m_%d_%H_%M}.pkl'.format(epoch, timestamp)))
-pickle.dump(losses, open(home+'/multimodal-descriptions/losses_flickr8k_baseline_model_last-epoch_{}_t_{:%m_%d_%H_%M}.pkl'.format(epoch, timestamp)))
+    caption_model.train()
 
-last_model_file_name = home+'/multimodal-descriptions/flickr8k_baseline_model_last-epoch_{}_t_{:%m_%d_%H_%M}.torchsave'.format(epoch, timestamp)
+pickle.dump(scores, open('output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
+pickle.dump(losses, open('output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
+
 torch.save(caption_model.state_dict(), last_model_file_name)

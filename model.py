@@ -11,7 +11,7 @@ class EncoderCNN(nn.Module):
         inception = models.inception_v3(pretrained=True)
         modules = list(inception.children())[:-1]
         self.inception = nn.Sequential(*modules).to(device)
-        self.linear = nn.Linear(resnet.fc.in_features, embedding_size)
+        self.linear = nn.Linear(inception.fc.in_features, embedding_size)
         self.batchnorm = nn.BatchNorm1d(embedding_size)
 
     def forward(self, x):
