@@ -141,7 +141,7 @@ for epoch in range(max_epochs):
         opt.step()
 
     #create validation result file
-    print('validation...')
+    print(i_batch+'batches done: next validation...')
     caption_model.eval()
     encoder = caption_model.encoder.cuda()
     decoder = caption_model.decoder.cuda()

@@ -67,5 +67,5 @@ class DataProcessor():
     def load(self):
         vocab = pickle.load(open(self.filename, 'rb'))
         vocab_size = len(vocab)
-        vocab_weights = [0.,1.,1.,1.] + list(range(len(vocab)))
+        vocab_weights = [0.,1.,1.,1.] + list(range(len(vocab)-4))
         return vocab, vocab_size, vocab_weights

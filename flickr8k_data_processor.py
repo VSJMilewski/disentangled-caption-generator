@@ -15,8 +15,10 @@ class data():
         self.START = start
         self.END = end
         if os.path.isfile(filename):
+            print('open data pickle.')
             self.samples = pickle.load(open(filename,'rb'))
         else:
+            print('create data pickle.')
             self.samples = self.create_samples(annotations, processor)
         pickle.dump(self.samples,open(filename,'wb'))
 
@@ -52,12 +54,12 @@ def batch_generator(data, batch_size, image_transform, device, seed=42):
             if current_id == len(keys):
                 batch_size = len(batch_captions)
                 break
-            captions = data.samples[keys[i]]
+            captions = data.samples[keys[current_id]]
             for c in captions:
                 lengths.append(len(c))
             batch_captions += captions
-            image_names.append(keys[i])
-            image = Image.open(data.base_path_images+keys[i])
+            image_names.append(keys[current_id])
+            image = Image.open(data.base_path_images+keys[current_id])
             batch_images += [image_transform(image)]*5
             current_id += 1
 
@@ -85,8 +87,8 @@ def batch_generator_dev(data, batch_size, image_transform, device, seed=42):
             if current_id == len(keys):
                 batch_size = len(batch_images)
                 break
-            image_names.append(keys[i])
-            image = Image.open(data.base_path_images+keys[i])
+            image_names.append(keys[current_id])
+            image = Image.open(data.base_path_images+keys[current_id])
             batch_images += [image_transform(image)]
             current_id += 1
 
