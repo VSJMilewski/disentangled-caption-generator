@@ -70,3 +70,26 @@ def batch_generator(data, batch_size, image_transform, device, seed=42):
         lengths = torch.FloatTensor(lengths).to(device)
 
         yield (batch_im, batch_cap, lengths, image_names)
+
+def batch_generator_dev(data, batch_size, image_transform, device, seed=42):
+    keys = list(data.samples.keys())
+    current_id = 0
+
+    while True:
+        if current_id == len(keys):
+            break
+
+        batch_images = []
+        image_names = []
+        for i in range(batch_size):
+            if current_id == len(keys):
+                batch_size = len(batch_images)
+                break
+            image_names.append(keys[i])
+            image = Image.open(data.base_path_images+keys[i])
+            batch_images += [image_transform(image)]
+            current_id += 1
+
+        batch_im  = torch.stack(batch_images,dim=0).to(device)
+
+        yield (batch_im, image_names)

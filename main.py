@@ -148,7 +148,7 @@ for epoch in range(max_epochs):
     decoder = caption_model.decoder.cuda()
 
     predicted_sentences = dict()
-    for image,caption,length,image_name in batch_generator(devdata,1,transform_eval, device):
+    for image,caption,length,image_name in batch_generator_dev(devdata,1,transform_eval, device):
         # Encode
         h0 = encoder(image)
 
