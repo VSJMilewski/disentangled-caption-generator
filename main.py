@@ -37,7 +37,6 @@ import pickle
 from collections import Counter
 from collections import defaultdict
 import os
-from datetime import datetime
 
 import json
 from json import encoder
@@ -177,8 +176,7 @@ for epoch in range(max_epochs):
         del(prediction)
 
     #perform validation
-    timestamp = datetime.now()
-    prediction_file = 'data/prediction/dev_epoch_{}_baseline_t_{:%m_%d_%H_%M}.pred'.format(epoch, timestamp)
+    prediction_file = 'output/dev_epoch_{}_baseline.pred'.format(epoch)
     with open(prediction_file, 'w', encoding='utf-8') as f:
         for im, p in predicted_sentences.items():
             if p[-1] == END:

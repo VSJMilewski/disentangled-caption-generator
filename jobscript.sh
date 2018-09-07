@@ -23,4 +23,4 @@ python3 $HOME/multimodal-descriptions/main.py
 echo ""
 echo ""
 echo "tarring output to home"
-tar zcf $HOME/multimodal-descriptions/output_$HOSTNAME.tar.gz output
+tar zcf $HOME/multimodal-descriptions/output_$PBS_JOBID.tar.gz output
