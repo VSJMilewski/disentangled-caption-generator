@@ -162,7 +162,7 @@ for epoch in range(max_epochs):
         predicted_words = []
         prediction = start_token.view(1,1)
         for w_idx in range(max_sentence_length):
-            prediction, hidden_state = self.decoder(prediction, hidden_state)
+            prediction, hidden_state = decoder(prediction, hidden_state)
 
             index_predicted_word = np.argmax(prediction.detach().numpy(), axis=2)[0][0]
             predicted_word = dev_processor.i2w[index_predicted_word]
