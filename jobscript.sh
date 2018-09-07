@@ -1,6 +1,6 @@
 #PBS -qgpu
 #PBS -lnodes=1
-#PBS -lwalltime=00:05:00
+#PBS -lwalltime=00:35:00
 
 echo "creating a tar for the data"
 tar zcf $HOME/multimodal-descriptions/data.tar.gz -C $HOME/multimodal-descriptions/ data

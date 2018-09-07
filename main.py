@@ -148,7 +148,7 @@ for epoch in range(max_epochs):
     decoder = caption_model.decoder.cuda()
 
     predicted_sentences = dict()
-    for image,caption,length,image_name in batch_generator_dev(devdata,1,transform_eval, device):
+    for image,image_name in batch_generator_dev(devdata,1,transform_eval, device):
         # Encode
         h0 = encoder(image)
 
@@ -164,13 +164,13 @@ for epoch in range(max_epochs):
         for w_idx in range(max_sentence_length):
             prediction, hidden_state = decoder(prediction, hidden_state)
 
-            index_predicted_word = np.argmax(prediction.detach().numpy(), axis=2)[0][0]
-            predicted_word = dev_processor.i2w[index_predicted_word]
+            index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
+            predicted_word = processor.i2w[index_predicted_word]
             predicted_words.append(predicted_word)
 
             if predicted_word == END:
                 break
-            prediction = torch.LongTensor([index_predicted_word]).view(1,1)
+            prediction = torch.cuda.LongTensor([index_predicted_word]).view(1,1)
         predicted_sentences[image_name[0]] = predicted_words
 
         del(start_token)
