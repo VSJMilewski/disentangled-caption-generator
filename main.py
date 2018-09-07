@@ -183,7 +183,7 @@ for epoch in range(max_epochs):
         for im, p in predicted_sentences.items():
             if p[-1] == END:
                 p = p[:-1]
-            f.write('im\t'+' '.join(p) + '\n')
+            f.write(im+'\t'+' '.join(p) + '\n')
 
     score = evaluate(prediction_file, reference_file)
     scores.append(score)
