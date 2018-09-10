@@ -88,7 +88,7 @@ transform_eval = transforms.Compose([
 #setup data stuff
 print('reading data files...')
 base_path_images = './data/flickr8k/Flicker8k_Dataset/'
-reference_file = './data/flickr8k/Flickr8k_references.json'
+reference_file = './data/flickr8k/Flickr8k_references.dev.json'
 train_images = None
 dev_images = None
 test_images = None
@@ -141,7 +141,7 @@ for epoch in range(max_epochs):
         opt.step()
 
     #create validation result file
-    print('next validation...')
+    print('validation...')
     caption_model.eval()
     encoder = caption_model.encoder.cuda()
     decoder = caption_model.decoder.cuda()
