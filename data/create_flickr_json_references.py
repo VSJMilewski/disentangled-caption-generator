@@ -75,6 +75,27 @@ class CocoAnnotations:
         if count%1000 == 0:
           print ('Processed %d ...' % count)
 
+  def read_file_restricted(self,filename, restriction_list):
+    count = 0
+    with open(filename,'r') as opfd:
+      for line in opfd:
+        count +=1
+        id_sent = line.strip().split('\t')
+        assert len(id_sent)==2
+        if id_sent[0][:-2] in restriction_list: #last two char are caption num
+          sent = id_sent[1].decode('ascii', 'ignore')
+          image_dict,image_hash = self.get_image_dict(id_sent[0][:-2])#last two char are caption num
+          self.images.append(image_dict)
+
+          self.annotations.append({
+            "id" : len(self.annotations)+1,
+            "image_id" : image_hash,
+            "caption" : sent,
+            })
+
+        if count%1000 == 0:
+          print ('Processed %d ...' % count)
+
   def dump_json(self, outfile):
     self.res["images"] = self.images
     self.res["annotations"] = self.annotations
@@ -88,14 +109,26 @@ def main():
       help='File containing reference sentences.')
   parser.add_argument("-o", "--outputfile", type=str,
       help='Filename for the JSON references.')
+  parser.add_argument("-r", "--restrictionfile", type=str,
+      help='Filename for file with restriced images.')
   args = parser.parse_args()
 
   input_file = args.input_references
   output_file = '{0}.json'.format(input_file)
   if args.outputfile:
     output_file = args.outputfile
+  res_file = None
+  if args.restrictionfile:
+    res_file = args.restrictionfile
+
   crf = CocoAnnotations()
-  crf.read_file(input_file)
+  if res_file:
+    restriction_list = None
+    with open(res_file) as f:
+      restriction_list = f.read().splitlines()
+    crf.read_file_restricted(input_file, restriction_list)
+  else:
+    crf.read_file(input_file)
   crf.dump_json(output_file)
   print ('Created json references in %s' % output_file)
 

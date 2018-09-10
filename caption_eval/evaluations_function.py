@@ -50,7 +50,7 @@ class CocoResFormat:
           imgid_sent['image_id'] = img_id
           imgid_sent['caption'] = sent
           self.res.append(imgid_sent)
-        if count%1000 == 0:
+        if count%500 == 0:
           print ('Processed %d ...' % count)
 
   def dump_json(self, outfile):
