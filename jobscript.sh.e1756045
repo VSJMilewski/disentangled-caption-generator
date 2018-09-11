@@ -1,0 +1,66 @@
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 257843.12 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 301785.76 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 328485.24 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 301870.51 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 322247.36 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 299869.93 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 318919.64 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 302391.60 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 324818.06 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 301127.55 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 322857.15 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 305199.41 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 316597.55 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 290519.71 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 331577.79 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 300247.59 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 328993.65 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 295053.80 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 327637.76 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 291338.91 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 318509.15 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 299444.44 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 322975.35 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 294992.24 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 331858.44 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 295319.17 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 327352.05 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 291658.47 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 64447 tokens at 324679.63 tokens per second.
+Picked up _JAVA_OPTIONS: -Djava.io.tmpdir=/scratch
+PTBTokenizer tokenized 60999 tokens at 297056.00 tokens per second.
+/home/milewgpu/.local/lib/python3.5/site-packages/torch/nn/functional.py:52: UserWarning: size_average and reduce args will be deprecated, please use reduction='none' instead.
+  warnings.warn(warning.format(ret))
+Traceback (most recent call last):
+  File "/home/milewgpu/multimodal-descriptions/main.py", line 193, in <module>
+    if number_up > patience and epoch > min_epoch:
+NameError: name 'min_epoch' is not defined

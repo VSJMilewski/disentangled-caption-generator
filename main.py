@@ -63,7 +63,8 @@ vocab_size = 30000
 max_sentence_length = 60
 
 learning_rate = 1e-1
-max_epochs = 200
+max_epochs = 800
+min_epochs = 100
 batch_size = 13
 
 embedding_size = 512
@@ -189,7 +190,7 @@ for epoch in range(max_epochs):
     if len(scores) >= 1:
         if scores[-1]['Bleu_4'] <= best_bleu:
             number_up += 1
-            if number_up > patience:
+            if number_up > patience and epoch > min_epochs:
                 print('Finished training!')
                 break
         else:
@@ -198,7 +199,7 @@ for epoch in range(max_epochs):
 
     caption_model.train()
 
-pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
-pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)))
+pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 
 torch.save(caption_model.state_dict(), last_model_file_name)
