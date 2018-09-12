@@ -23,7 +23,7 @@ encoder.FLOAT_REPR = lambda o: format(o, '.3f')
 
 # test if there is a gpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu') # uncomment if cuda does not work
+# device = torch.device('cpu') # uncomment if cuda does not work
 print(device)
 
 # hyper parameters
