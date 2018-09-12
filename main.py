@@ -1,29 +1,55 @@
+# loadbars to track the run/speed
+from tqdm import tqdm, trange
+
+# numpy for arrays/matrices/mathematical stuff
 import numpy as np
+
+# nltk for tokenizer
+from nltk.tokenize import wordpunct_tokenize
+
+# torch for the NN stuff
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import SGD
+
+# torch tools for data processing
 from torch.utils.data import DataLoader
-import pycocotools  # cocoAPI
+import pycocotools #cocoAPI
+
+# torchvision for the image dataset and image processing
 from torchvision.datasets import CocoCaptions
 from torchvision import transforms
 from torchvision import models
+
+#coco captions evaluation
+# from pycocotools.coco import COCO
+# from pycocoevalcap.eval import COCOEvalCap
+
+# packages for plotting
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 import skimage.io as io
+
+# additional stuff
 import pickle
 from collections import Counter
 from collections import defaultdict
 import os
+
 import json
+from json import encoder
+encoder.FLOAT_REPR = lambda o: format(o, '.3f')
+
+# import other files
 from model import *
 from vocab_flickr8k import *
 from caption_eval.evaluations_function import *
 from flickr8k_data_processor import *
-from json import encoder
-encoder.FLOAT_REPR = lambda o: format(o, '.3f')
 
-# test if there is a gpu
+#test if there is a gpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# device = torch.device('cpu') # uncomment if cuda does not work
 print(device)
 
 # hyper parameters
