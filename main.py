@@ -62,7 +62,7 @@ vocab_size = 30000
 max_sentence_length = 60
 
 learning_rate = 1e-1
-max_epochs = 2
+max_epochs = 800
 min_epochs = 0
 batch_size = 13 #5 images per sample, so 65 samples
 
@@ -155,7 +155,6 @@ for epoch in range(max_epochs):
         loss.backward()
         losses.append(float(loss))
         opt.step()
-        break
 
     # create validation result file
     print('validation...')
