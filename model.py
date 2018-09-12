@@ -74,9 +74,9 @@ class CaptionModel(nn.Module):
             print(prediction)
             print("\nhidden_state")
             print(hidden_state)
-        out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
-        print("out")
-        print(out)
+            out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
+            print("out")
+            print(out)
         # normalize loss
         out = torch.mean(torch.div(out,
                                    caption_lengths))  # the loss is the average of losses, so divide over number of words in each sentence
