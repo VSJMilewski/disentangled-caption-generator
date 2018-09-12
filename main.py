@@ -125,7 +125,7 @@ processor.save()
 
 print('create data processing objects...')
 train_data = data(base_path_images, train_images, annotations, max_sentence_length, processor, train_data_file, START, END)
-dev_data = data(base_path_images, dev_images, annotations, max_sentence_length, processor, dev_images, START, END)
+dev_data = data(base_path_images, dev_images, annotations, max_sentence_length, processor, dev_data_file, START, END)
 test_data = data(base_path_images, test_images, annotations, max_sentence_length, processor, test_data_file , START, END)
 
 # create the models
