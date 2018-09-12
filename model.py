@@ -49,7 +49,7 @@ class CaptionModel(nn.Module):
         super().__init__()
         self.device = device
         self.target_vocab_size = target_vocab_size
-        self.encoder = EncoderCNN(embedding_size, device).to(device)
+        self.encoder = EncoderCNN(embedding_size).to(device)
         self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
         self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
