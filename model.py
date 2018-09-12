@@ -56,9 +56,12 @@ class CaptionModel(nn.Module):
     def forward(self, images, captions, caption_lengths):
         # Encode
         h0 = self.encoder(images)
-
+        print("h0")
+        print(h0)
         # prepare decoder initial hidden state
         h0 = h0.unsqueeze(0)
+        print(h0)
+        print("\nc0")
         c0 = torch.zeros(h0.shape).to(self.device)
         hidden_state = (h0, c0)
 
@@ -67,8 +70,13 @@ class CaptionModel(nn.Module):
         out = torch.zeros((batch_size)).to(self.device)
         for w_idx in range(max_sent_len - 1):
             prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state)
+            print("\nprediction")
+            print(prediction)
+            print("\nhidden_state")
+            print(hidden_state)
         out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
-
+        print("out")
+        print(out)
         # normalize loss
         out = torch.mean(torch.div(out,
                                    caption_lengths))  # the loss is the average of losses, so divide over number of words in each sentence
