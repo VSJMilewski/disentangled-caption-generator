@@ -63,7 +63,7 @@ max_sentence_length = 60
 
 learning_rate = 1e-1
 max_epochs = 800
-min_epochs = 0
+min_epochs = 50
 batch_size = 13 #5 images per sample, so 65 samples
 
 embedding_size = 512
@@ -207,6 +207,7 @@ for epoch in range(max_epochs):
                 print('Finished training!')
                 break
         else:
+            number_up = 0
             torch.save(caption_model.state_dict(), best_epoch_file)
             best_bleu = scores[-1]['Bleu_4']
             best_epoch = epoch
