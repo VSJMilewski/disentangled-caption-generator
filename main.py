@@ -134,10 +134,11 @@ caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(de
 caption_model.train(True)  # probably not needed. better to be safe
 opt = SGD(caption_model.parameters(), lr=learning_rate)
 
+# variables for training
 losses = []
 scores = []
-best_bleu = 0
-best_epoch = 0
+best_bleu = -1
+best_epoch = -1
 number_up = 0
 opt.zero_grad()
 
@@ -200,21 +201,22 @@ for epoch in range(max_epochs):
     score = evaluate(prediction_file, reference_file)
     scores.append(score)
     torch.save(caption_model.state_dict(), last_epoch_file)
-    if len(scores) >= 1:
-        if scores[-1]['Bleu_4'] <= best_bleu:
-            number_up += 1
-            if number_up > patience and epoch > min_epochs:
-                print('Finished training!')
-                break
-        else:
-            number_up = 0
-            torch.save(caption_model.state_dict(), best_epoch_file)
-            best_bleu = scores[-1]['Bleu_4']
-            best_epoch = epoch
+    if score <= best_bleu:
+        number_up += 1
+        if number_up > patience and epoch > min_epochs:
+            print('Finished training!')
+            break
+    else:
+        number_up = 0
+        torch.save(caption_model.state_dict(), best_epoch_file)
+        best_bleu = scores[-1]['Bleu_4']
+        best_epoch = epoch
 
     caption_model.train()
 
-print('\n\n=============\n Best Epoch' + str(best_epoch) + '\n=============\n')
+print('\n\n=============\n Best Epoch = ' + str(best_epoch) + '\n=============')
+print(scores[best_epoch])
+print('=============\n')
 
 pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
