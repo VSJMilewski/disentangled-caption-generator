@@ -136,6 +136,8 @@ opt = SGD(caption_model.parameters(), lr=learning_rate)
 
 # variables for training
 losses = []
+avg_losses = []
+loss_current_ind = 0
 scores = []
 best_bleu = -1
 best_epoch = -1
@@ -192,6 +194,9 @@ for epoch in range(max_epochs):
         del prediction
 
     # perform validation
+    avg_losses.append(np.mean(losses[loss_current_ind:-1]))
+    loss_current_ind = len(losses)
+
     with open(prediction_file, 'w', encoding='utf-8') as f:
         for im, p in predicted_sentences.items():
             if p[-1] == END:
@@ -220,5 +225,6 @@ print('=============\n')
 
 pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+pickle.dump(avg_losses, open('./output/avg_glosses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 
 torch.save(caption_model.state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
