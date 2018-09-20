@@ -11,7 +11,7 @@ from nltk.tokenize import wordpunct_tokenize
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import SGD
+from torch.optim import SGD, Adam
 
 # torch tools for data processing
 from torch.utils.data import DataLoader
@@ -63,7 +63,7 @@ max_sentence_length = 60
 
 learning_rate = 1e-3
 max_epochs = 800
-min_epochs = 50
+min_epochs = 0
 batch_size = 13 #5 images per sample, so 65 samples
 
 embedding_size = 512
@@ -132,7 +132,7 @@ test_data = data(base_path_images, test_images, annotations, max_sentence_length
 print('create model...')
 caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
 caption_model.train(True)  # probably not needed. better to be safe
-opt = SGD(caption_model.parameters(), lr=learning_rate)
+opt = Adam(caption_model.parameters(), lr=learning_rate)
 
 # variables for training
 losses = []
