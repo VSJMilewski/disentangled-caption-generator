@@ -21,9 +21,10 @@ class EncoderCNN(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size, switch_size):
+    def __init__(self, target_vocab_size, embedding_size, switch_size, number_of_topics, topic_emb):
         super().__init__()
 
+        self.topic_emb = topic_emb
         self.embedding_size = embedding_size
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
         self.LSTM = nn.LSTM(embedding_size, embedding_size)
@@ -31,12 +32,16 @@ class Decoder(nn.Module):
         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)
 
         # general topic modelling
-        self.relu = nn.ReLU
+        self.relu = nn.ReLU()
+        self.mixing_linear1 = nn.Linear(switch_size, switch_size)
+        self.mixing_linear2 = nn.Linear(switch_size, switch_size)
         self.topic_linear1 = nn.Linear(switch_size, switch_size)
-        self.topic_linear2 = nn.Linear(switch_size, target_vocab_size)
+        self.topic_linear2 = nn.Linear(switch_size, number_of_topics)
+        self.desc_linear1 = nn.Linear(number_of_topics * 2, number_of_topics * 2)
+        self.desc_linear2 = nn.Linear(number_of_topics * 2, target_vocab_size)
         self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, input_words, hidden_input, topic_input, switch):
+    def forward(self, input_words, hidden_input, topic_input, switch, z0):
         # find the embedding of the correct word to be predicted
         emb = self.target_embeddings(input_words)
         # reshape to the correct order for the LSTM
@@ -47,9 +52,17 @@ class Decoder(nn.Module):
         output = self.logit_lin(lstm_output)
 
         # Put through the description model
-        r31 = self.relu(self.topic_linear1(topic_input))
-        r32 = self.relu(self.topic_linear1(r31))
-        desc_output = self.softmax(r32)
+        # Mixing coefficient
+        r31 = self.relu(self.mixing_linear1(topic_input))
+        r32 = self.relu(self.mixing_linear2(r31))
+        # topic modelling
+        r41 = self.relu(self.topic_linear1(r32))
+        r42 = self.relu(self.topic_linear2(r41))
+        zi = torch.matmul(r42, self.topic_emb)
+        desc_input = torch.cat((z0, zi), 1)
+        r51 = self.relu(self.topic_linear1(desc_input))
+        r52 = self.relu(self.topic_linear1(r51))
+        desc_output = self.softmax(r52)
 
         # binary selection
         output[switch] = desc_output[switch]
@@ -67,19 +80,21 @@ class CaptionModel(nn.Module):
         super().__init__()
         self.device = device
         self.target_vocab_size = target_vocab_size
-        self.encoder = EncoderCNN(embedding_size).to(device)
-        self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
-        self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
-
+        switch_size = embedding_size * 2 + number_of_topics
         self.topic_emb = nn.Embedding(number_of_topics, embedding_size)
         self.relu = nn.ReLU()
+
+        self.encoder = EncoderCNN(embedding_size).to(device)
+        self.decoder = Decoder(target_vocab_size, embedding_size, switch_size, number_of_topics, self.topic_emb).to(
+            device)
+        self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
+
 
         # general topic modelling
         self.topic_linear1 = nn.Linear(embedding_size, embedding_size)
         self.topic_linear2 = nn.Linear(embedding_size, number_of_topics)
 
         # binary switch
-        switch_size = embedding_size * 2 + number_of_topics
         self.switch_linear1 = nn.Linear(switch_size, switch_size)
         self.switch_linear2 = nn.Linear(switch_size, 2)
 
@@ -107,7 +122,8 @@ class CaptionModel(nn.Module):
             r22 = self.relu(self.switch_linear2(r21))
             switch = torch.argmax(r22, 1)
 
-            prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state, switch)
+            prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state, switch, z0)
+
 
             out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
         # normalize loss where each sentence is a different length
