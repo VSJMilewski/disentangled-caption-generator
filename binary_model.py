@@ -21,22 +21,39 @@ class EncoderCNN(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size):
+    def __init__(self, target_vocab_size, embedding_size, switch_size):
         super().__init__()
 
         self.embedding_size = embedding_size
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
         self.LSTM = nn.LSTM(embedding_size, embedding_size)
-        self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
+        # output layer
+        self.logit_lin = nn.Linear(embedding_size, target_vocab_size)
 
-    def forward(self, input_words, hidden_input):
+        # general topic modelling
+        self.relu = nn.ReLU
+        self.topic_linear1 = nn.Linear(switch_size, switch_size)
+        self.topic_linear2 = nn.Linear(switch_size, target_vocab_size)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, input_words, hidden_input, topic_input, switch):
         # find the embedding of the correct word to be predicted
         emb = self.target_embeddings(input_words)
         # reshape to the correct order for the LSTM
         emb = emb.view(1, emb.size(0), self.embedding_size)
+
         # Put through the next LSTM step
         lstm_output, hidden = self.LSTM(emb, hidden_input)
         output = self.logit_lin(lstm_output)
+
+        # Put through the description model
+        r31 = self.relu(self.topic_linear1(topic_input))
+        r32 = self.relu(self.topic_linear1(r31))
+        desc_output = self.softmax(r32)
+
+        # binary selection
+        output[switch] = desc_output[switch]
+        hidden[switch] = hidden_input[switch]
 
         return output, hidden
 
@@ -45,6 +62,7 @@ class CaptionModel(nn.Module):
     def __init__(self,
                  embedding_size,
                  target_vocab_size,
+                 number_of_topics,
                  device):
         super().__init__()
         self.device = device
@@ -52,6 +70,18 @@ class CaptionModel(nn.Module):
         self.encoder = EncoderCNN(embedding_size).to(device)
         self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
         self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
+
+        self.topic_emb = nn.Embedding(number_of_topics, embedding_size)
+        self.relu = nn.ReLU()
+
+        # general topic modelling
+        self.topic_linear1 = nn.Linear(embedding_size, embedding_size)
+        self.topic_linear2 = nn.Linear(embedding_size, number_of_topics)
+
+        # binary switch
+        switch_size = embedding_size * 2 + number_of_topics
+        self.switch_linear1 = nn.Linear(switch_size, switch_size)
+        self.switch_linear2 = nn.Linear(switch_size, 2)
 
     def forward(self, images, captions, caption_lengths):
         # Encode
@@ -61,13 +91,26 @@ class CaptionModel(nn.Module):
         c0 = torch.zeros(h0.shape).to(self.device)
         hidden_state = (h0, c0)
 
+        # general topics
+        r11 = self.relu(self.topic_linear1(h0))
+        r12 = self.relu(self.topic_linear2(r11))
+
+        z0 = torch.matmul(r12, self.topic_emb)
+
         # Decode
         batch_size, max_sent_len = captions.shape
         out = torch.zeros((batch_size)).to(self.device)
         for w_idx in range(max_sent_len - 1):
-            prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state)
+            # binary switch
+            switch_input = torch.cat((h0, z0, hidden_state[0]), 1)
+            r21 = self.relu(self.switch_linear1(switch_input))
+            r22 = self.relu(self.switch_linear2(r21))
+            switch = torch.argmax(r22, 1)
+
+            prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state, switch)
+
             out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
-        # normalize loss where each sentencen is a different length
+        # normalize loss where each sentence is a different length
         out = torch.mean(torch.div(out,
                                    caption_lengths))
 

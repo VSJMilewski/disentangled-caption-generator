@@ -206,7 +206,7 @@ for epoch in range(max_epochs):
     score = evaluate(prediction_file, reference_file)
     scores.append(score)
     torch.save(caption_model.state_dict(), last_epoch_file)
-    if score <= best_bleu:
+    if score['Bleu_4'] <= best_bleu:
         number_up += 1
         if number_up > patience and epoch > min_epochs:
             print('Finished training!')
