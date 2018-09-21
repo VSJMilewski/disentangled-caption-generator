@@ -61,7 +61,7 @@ UNK = '<UNK>'
 vocab_size = 30000
 max_sentence_length = 60
 
-learning_rate = 1e-3
+learning_rate = 1e-5
 max_epochs = 800
 min_epochs = 0
 batch_size = 13 #5 images per sample, so 65 samples
