@@ -4,6 +4,7 @@ from .bleu.bleu import Bleu
 from .meteor.meteor import Meteor
 from .rouge.rouge import Rouge
 from .cider.cider import Cider
+import time
 
 class COCOEvalCap:
     def __init__(self, coco, cocoRes):
@@ -47,16 +48,18 @@ class COCOEvalCap:
         # =================================================
         for scorer, method in scorers:
             print('computing %s score...'%(scorer.method()))
+            start = time.time()
             score, scores = scorer.compute_score(gts, res)
+            end = time.time()
             if type(method) == list:
                 for sc, scs, m in zip(score, scores, method):
                     self.setEval(sc, m)
                     self.setImgToEvalImgs(scs, gts.keys(), m)
-                    print("%s: %0.3f"%(m, sc))
+                    print("%s: %0.3f \t%0.5f" % (m, sc, end - start))
             else:
                 self.setEval(score, method)
                 self.setImgToEvalImgs(scores, gts.keys(), method)
-                print("%s: %0.3f"%(method, score))
+                print("%s: %0.3f  \t%0.5f" % (method, score, end - start))
         self.setEvalImgs()
 
     def setEval(self, score, method):

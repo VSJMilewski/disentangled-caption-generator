@@ -37,6 +37,7 @@ import pickle
 from collections import Counter
 from collections import defaultdict
 import os
+import time
 
 import json
 from json import encoder
@@ -104,6 +105,7 @@ test_data_file = './data_flickr8k_test.pkl'
 
 # setup data stuff
 print('reading data files...')
+start = time.time()
 train_images = None
 dev_images = None
 test_images = None
@@ -116,23 +118,33 @@ with open(test_images_file) as f:
     test_images = f.read().splitlines()
 with open(captions_file) as f:
     annotations = f.read().splitlines()
-
+end = time.time()
+print("time opening files: " + str(end - start))
 print('create/open vocabulary')
+start = time.time()
 dev_processor = DataProcessor(annotations, dev_images, filename= dev_vocab_file , vocab_size=vocab_size)
 dev_processor.save()
 processor = DataProcessor(annotations, train_images, filename= train_vocab_file, vocab_size=vocab_size)
 processor.save()
+end = time.time()
+print("open vocab: " + str(end - start))
 
 print('create data processing objects...')
+start = time.time()
 train_data = data(base_path_images, train_images, annotations, max_sentence_length, processor, train_data_file, START, END)
 dev_data = data(base_path_images, dev_images, annotations, max_sentence_length, processor, dev_data_file, START, END)
 test_data = data(base_path_images, test_images, annotations, max_sentence_length, processor, test_data_file , START, END)
+end = time.time()
+print("data processor: " + str(end - start))
 
 # create the models
 print('create model...')
+start = time.time()
 caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
 caption_model.train(True)  # probably not needed. better to be safe
 opt = Adam(caption_model.parameters(), lr=learning_rate)
+end = time.time()
+print("model created: " + str(end - start))
 
 # variables for training
 losses = []
@@ -147,6 +159,7 @@ opt.zero_grad()
 # loop over number of epochs
 print('training...')
 for epoch in range(max_epochs):
+    start = time.time()
     print('\n\n epoch %d' % epoch)
     # loop over all the training batches
     for i_batch, batch in enumerate(batch_generator(train_data, batch_size, transform_train, device)):
@@ -159,8 +172,11 @@ for epoch in range(max_epochs):
         losses.append(float(loss))
         opt.step()
 
+    end = time.time()
+    print("epoch " + str(epoch) + " train time: " + str(end - start))
     # create validation result file
     print('validation...')
+    start = time.time()
     caption_model.eval()
     enc = caption_model.encoder.to(device)
     dec = caption_model.decoder.to(device)
@@ -216,7 +232,8 @@ for epoch in range(max_epochs):
         torch.save(caption_model.state_dict(), best_epoch_file)
         best_bleu = scores[-1]['Bleu_4']
         best_epoch = epoch
-
+    end = time.time()
+    print("validation time: " + str(end - start))
     caption_model.train()
 
 print('\n\n=============\n Best Epoch = ' + str(best_epoch) + '\n=============')
