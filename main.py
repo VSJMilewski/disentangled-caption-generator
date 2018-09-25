@@ -51,7 +51,6 @@ from flickr8k_data_processor import *
 
 #test if there is a gpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
 print(device)
 
 # hyper parameters
