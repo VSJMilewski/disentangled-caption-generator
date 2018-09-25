@@ -27,7 +27,7 @@ class COCOEvalCap:
         # =================================================
         # Set up scorers
         # =================================================
-        print('tokenization...')
+        # print('tokenization...')
         tokenizer = PTBTokenizer()
         gts  = tokenizer.tokenize(gts)
         res = tokenizer.tokenize(res)
@@ -35,7 +35,7 @@ class COCOEvalCap:
         # =================================================
         # Set up scorers
         # =================================================
-        print('setting up scorers...')
+        # print('setting up scorers...')
         scorers = [
             (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
             (Meteor(),"METEOR"),
@@ -47,19 +47,19 @@ class COCOEvalCap:
         # Compute scores
         # =================================================
         for scorer, method in scorers:
-            print('computing %s score...'%(scorer.method()))
-            start = time.time()
+            # print('computing %s score...'%(scorer.method()))
+            # start = time.time()
             score, scores = scorer.compute_score(gts, res)
-            end = time.time()
+            # end = time.time()
             if type(method) == list:
                 for sc, scs, m in zip(score, scores, method):
                     self.setEval(sc, m)
                     self.setImgToEvalImgs(scs, gts.keys(), m)
-                    print("%s: %0.3f \t%0.5f" % (m, sc, end - start))
+                    # print("%s: %0.3f \t%0.5f" % (m, sc, end - start))
             else:
                 self.setEval(score, method)
                 self.setImgToEvalImgs(scores, gts.keys(), method)
-                print("%s: %0.3f  \t%0.5f" % (method, score, end - start))
+                # print("%s: %0.3f  \t%0.5f" % (method, score, end - start))
         self.setEvalImgs()
 
     def setEval(self, score, method):

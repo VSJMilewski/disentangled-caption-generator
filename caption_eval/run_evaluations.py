@@ -21,7 +21,7 @@ class CocoResFormat:
 
   def read_multiple_files(self, filelist, hash_img_name):
     for filename in filelist:
-      print ('In file %s\n' % filename)
+        # print ('In file %s\n' % filename)
       self.read_file(filename, hash_img_name)
 
   def read_file(self, filename, hash_img_name):
@@ -50,8 +50,8 @@ class CocoResFormat:
           imgid_sent['image_id'] = img_id
           imgid_sent['caption'] = sent
           self.res.append(imgid_sent)
-        if count%1000 == 0:
-          print ('Processed %d ...' % count)
+        # if count%1000 == 0:
+        # print ('Processed %d ...' % count)
 
   def dump_json(self, outfile):
     res = self.res
@@ -92,7 +92,7 @@ def main():
   results = dict()
   for metric, score in cocoEval.eval.items():
     results[metric] = score
-    print ('%s: %.3f'%(metric, score))
+    # print ('%s: %.3f'%(metric, score))
 
   return results
 

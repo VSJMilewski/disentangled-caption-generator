@@ -57,10 +57,9 @@ class CaptionModel(nn.Module):
         # Encode
         h0 = self.encoder(images)
         # prepare decoder initial hidden state
-        h0 = h0.unsqueeze(0)
+        h0 = h0.unsqueeze(0)  # seq len, batch size, emb size
         c0 = torch.zeros(h0.shape).to(self.device)
         hidden_state = (h0, c0)
-
         # Decode
         batch_size, max_sent_len = captions.shape
         out = torch.zeros((batch_size)).to(self.device)
@@ -70,5 +69,4 @@ class CaptionModel(nn.Module):
         # normalize loss where each sentencen is a different length
         out = torch.mean(torch.div(out,
                                    caption_lengths))
-
         return out

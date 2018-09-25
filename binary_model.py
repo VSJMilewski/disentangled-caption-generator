@@ -80,6 +80,7 @@ class CaptionModel(nn.Module):
         super().__init__()
         self.device = device
         self.target_vocab_size = target_vocab_size
+        self.number_of_topics = number_of_topics
         switch_size = embedding_size * 2 + number_of_topics
         self.topic_emb = nn.Embedding(number_of_topics, embedding_size)
         self.relu = nn.ReLU()
@@ -110,7 +111,8 @@ class CaptionModel(nn.Module):
         r11 = self.relu(self.topic_linear1(h0))
         r12 = self.relu(self.topic_linear2(r11))
 
-        z0 = torch.matmul(r12, self.topic_emb)
+        embs = self.topic_emb(torch.arange(self.number_of_topics).to(device))
+        z0 = torch.matmul(r12, embs)
 
         # Decode
         batch_size, max_sent_len = captions.shape
