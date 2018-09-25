@@ -198,9 +198,8 @@ def validation_step(model, batch_size):
             f.write(im + '\t' + ' '.join(p) + '\n')
 
     score = evaluate(prediction_file, reference_file)
-    scores.append(score)
-    torch.save(caption_model.state_dict(), last_epoch_file)
     caption_model.train()
+    return score
 
 
 # loop over number of epochs
@@ -222,7 +221,9 @@ for epoch in range(max_epochs):
         opt.step()
 
     # create validation result file
-    validation_step(caption_model, 1)
+    score = validation_step(caption_model, 1)
+    scores.append(score)
+    torch.save(caption_model.state_dict(), last_epoch_file)
     if score['Bleu_4'] <= best_bleu:
         number_up += 1
         if number_up > patience and epoch > min_epochs:
