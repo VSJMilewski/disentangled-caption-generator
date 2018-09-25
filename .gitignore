@@ -106,3 +106,6 @@ venv.bak/
 # images
 *.jpg
 *.jpeg
+
+
+*.tar.gz
