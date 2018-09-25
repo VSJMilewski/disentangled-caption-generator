@@ -208,9 +208,9 @@ def print_info():
 
 
 def print_score(score, time):
-    print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}'.format(
-        epoch, score['Bleu_1'], score['Bleu_2'], score['Bleu_3'], score['Bleu_4'],
-        score['METEOR'], score['ROUGE_L'], score['CIDEr'], time))
+    print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}s'.format(
+        epoch, score['Bleu_1'] * 100, score['Bleu_2'] * 100, score['Bleu_3'] * 100, score['Bleu_4'] * 100,
+               score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time))
 
 
 # loop over number of epochs
@@ -230,7 +230,10 @@ for epoch in range(max_epochs):
         losses.append(float(loss))
         opt.step()
 
-    # create validation result file
+    avg_losses.append(np.mean(losses[loss_current_ind:]))
+    loss_current_ind = epoch
+
+    # validation
     score = validation_step(caption_model, 1)
     scores.append(score)
     torch.save(caption_model.state_dict(), last_epoch_file)
@@ -245,7 +248,7 @@ for epoch in range(max_epochs):
         best_epoch = epoch
 
     end = time.time()
-    if epoch % 20 == 0:
+    if epoch % 50 == 0:
         print_info()
     print_score(scores[-1], end - start)
 
@@ -257,6 +260,6 @@ print('=' * 80)
 
 pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-pickle.dump(avg_losses, open('./output/avg_glosses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+pickle.dump(avg_losses, open('./output/avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 
 torch.save(caption_model.state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))

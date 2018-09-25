@@ -241,6 +241,8 @@ class BleuScorer(object):
 
             if verbose > 1:
                 print(comps, reflen)
+            with open('output/bleu_metrics.txt', 'a') as f:
+                print(comps, reflen, file=f)
 
         totalcomps['reflen'] = self._reflen
         totalcomps['testlen'] = self._testlen
