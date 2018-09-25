@@ -62,7 +62,7 @@ UNK = '<UNK>'
 vocab_size = 30000
 max_sentence_length = 60
 
-learning_rate = 1e-3
+learning_rate = 1e-1
 max_epochs = 1000
 min_epochs = 0
 batch_size = 25  # 5 images per sample, 13x5=65, 25x5=125
@@ -202,10 +202,20 @@ def validation_step(model, batch_size):
     return score
 
 
+def print_info():
+    print('=' * 80 + '\n{:8s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t{:7s}\n{}'.format(
+        'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80))
+
+
+def print_score(score, time):
+    print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}'.format(
+        epoch, score['Bleu_1'], score['Bleu_2'], score['Bleu_3'], score['Bleu_4'],
+        score['METEOR'], score['ROUGE_L'], score['CIDEr'], time))
+
+
 # loop over number of epochs
 print('training...')
-print('{:8s}\t{:6s}\t{:6s}\t{:6s}\t{:6s}\t{:6s}\t{:6s}\t{:6s}\t{:7s}\n{}'.format(
-    'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 75))
+start0 = time.time()
 for epoch in range(max_epochs):
     start = time.time()
     # loop over all the training batches
@@ -227,7 +237,6 @@ for epoch in range(max_epochs):
     if score['Bleu_4'] <= best_bleu:
         number_up += 1
         if number_up > patience and epoch > min_epochs:
-            print('=' * 75 + '\nFinished training!')
             break
     else:
         number_up = 0
@@ -236,16 +245,15 @@ for epoch in range(max_epochs):
         best_epoch = epoch
 
     end = time.time()
-    print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}'.format(
-        epoch, scores[-1]['Bleu_1'], scores[-1]['Bleu_2'], scores[-1]['Bleu_3'], scores[-1]['Bleu_4'],
-        scores[-1]['METEOR'], scores[-1]['ROUGE_L'], scores[-1]['CIDEr'], end - start))
+    if epoch % 20 == 0:
+        print_info()
+    print_score(scores[-1], end - start)
 
-print('\n' + '=' * 75 + '\n\t\tBest Epoch: ')
-print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}'.format(
-    best_epoch, scores[best_epoch]['Bleu_1'], scores[best_epoch]['Bleu_2'], scores[best_epoch]['Bleu_3'],
-    scores[best_epoch]['Bleu_4'], scores[best_epoch]['METEOR'], scores[best_epoch]['ROUGE_L'],
-    scores[best_epoch]['CIDEr']))
-print('=' * 75 + '\n')
+print_info()
+print('\n\n\t\t --- Best Epoch: ---')
+print_info()
+print_score(scores[best_epoch], time.time() - start0)
+print('=' * 80)
 
 pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
