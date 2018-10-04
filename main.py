@@ -11,7 +11,7 @@ from nltk.tokenize import wordpunct_tokenize
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim import SGD, Adam
+from torch.optim import Adam
 
 # torch tools for data processing
 from torch.utils.data import DataLoader
@@ -48,9 +48,11 @@ from model import *
 from vocab_flickr8k import *
 from caption_eval.evaluations_function import *
 from flickr8k_data_processor import *
+from beam_search import Beam
 
 #test if there is a gpu
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 print(device)
 
 # hyper parameters
@@ -62,10 +64,10 @@ UNK = '<UNK>'
 vocab_size = 30000
 max_sentence_length = 60
 
-learning_rate = 1e-1
+learning_rate = 1e-3
 max_epochs = 1000
 min_epochs = 0
-batch_size = 25  # 5 images per sample, 13x5=65, 25x5=125
+batch_size = 1  # 5 images per sample, 13x5=65, 25x5=125
 
 embedding_size = 512
 
@@ -106,10 +108,6 @@ test_data_file = './data_flickr8k_test.pkl'
 # setup data stuff
 print('reading data files...')
 start = time.time()
-train_images = None
-dev_images = None
-test_images = None
-annotations = None
 with open(train_images_file) as f:
     train_images = f.read().splitlines()
 with open(dev_images_file) as f:
@@ -157,49 +155,102 @@ best_epoch = -1
 number_up = 0
 
 
-def validation_step(model, batch_size):
+def validation_step(model, beam_size=20):
     model.eval()
-    enc = model.encoder.to(device)
-    dec = model.decoder.to(device)
+    with torch.no_grad():
+        enc = model.encoder.to(device)
+        dec = model.decoder.to(device)
 
-    predicted_sentences = dict()
-    for image, image_name in batch_generator_dev(dev_data, batch_size, transform_eval, device):
-        # Encode
-        h0 = enc(image)
+        predicted_sentences = dict()
+        for image, image_name in batch_generator_dev(dev_data, 1, transform_eval, device):
+            # Encode
+            h0 = enc(image)
 
-        # prepare decoder initial hidden state
-        h0 = h0.unsqueeze(0)
-        c0 = torch.zeros(h0.shape).to(device)
-        hidden_state = (h0, c0)
+            # expand the tensors to be of beamsize
+            h0 = h0.unsqueeze(0)
+            h0 = h0.repeat(1, beam_size, 1)
+            c0 = torch.zeros(h0.shape).to(device)
+            hidden_state = (h0, c0)
 
-        # Decode
-        start_token = torch.LongTensor([processor.w2i[START]]).to(device)
-        predicted_words = []
-        prediction = start_token.view(1, 1)
-        for w_idx in range(max_sentence_length):
-            prediction, hidden_state = dec(prediction, hidden_state)
+            # create the initial beam
+            beam = Beam(beam_size, processor.w2i, cuda=(device.type == 'cuda'))
 
-            index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
-            predicted_word = processor.i2w[index_predicted_word]
-            predicted_words.append(predicted_word)
+            # Decode
+            for w_idx in range(max_sentence_length):
+                input_ = beam.get_current_state().view(-1, 1)
+                out, hidden_state = dec(input_, hidden_state)
+                out = F.softmax(out, dim=2)
 
-            if predicted_word == END:
-                break
-            prediction = torch.LongTensor([index_predicted_word]).view(1, 1).to(device)
-        predicted_sentences[image_name[0]] = predicted_words
-        del start_token
-        del prediction
+                # process lstm step in beam search
+                active = not beam.advance(out.squeeze(0))  # returns true if complete
+                for dec_state in hidden_state:  # iterate over h, c
+                    dec_state.data.copy_(dec_state.data.index_select(1, beam.get_current_origin()))
+                # test if the beam is finished
+                if not active:
+                    break
 
-    # perform validation
-    with open(prediction_file, 'w', encoding='utf-8') as f:
-        for im, p in predicted_sentences.items():
-            if p[-1] == END:
-                p = p[:-1]
-            f.write(im + '\t' + ' '.join(p) + '\n')
+            # select the best hypothesis
+            score_, k = beam.get_best()
+            hyp = beam.get_hyp(k)
+            predicted_sentences[image_name[0]] = [processor.i2w[idx.item()] for idx in hyp]
+
+        # perform validation
+        with open(prediction_file, 'w', encoding='utf-8') as f:
+            for im, p in predicted_sentences.items():
+                if p[-1] == END:
+                    p = p[:-1]
+                f.write(im + '\t' + ' '.join(p) + '\n')
 
     score = evaluate(prediction_file, reference_file)
     caption_model.train()
     return score
+
+
+# def validation_step_backup(model, batch_size=1, beam_size=1):
+#     model.eval()
+#     with torch.no_grad():
+#         enc = model.encoder.to(device)
+#         dec = model.decoder.to(device)
+#
+#         predicted_sentences = dict()
+#         for image, image_name in batch_generator_dev(dev_data, batch_size, transform_eval, device):
+#             # Encode
+#             h0 = enc(image)
+#
+#             # prepare decoder initial hidden state
+#             h0 = h0.unsqueeze(0)
+#             c0 = torch.zeros(h0.shape).to(device)
+#             hidden_state = (h0, c0)
+#
+#             # Decode
+#             start_token = torch.LongTensor([processor.w2i[START]]).to(device)
+#             predicted_words = []
+#             prediction = start_token.view(1, 1)
+#             for w_idx in range(max_sentence_length):
+#                 prediction, hidden_state = dec(prediction, hidden_state)
+#
+#                 index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
+#                 predicted_word = processor.i2w[index_predicted_word]
+#                 predicted_words.append(predicted_word)
+#
+#                 if predicted_word == END:
+#                     break
+#                 prediction = torch.LongTensor([index_predicted_word]).view(1, 1).to(device)
+#             predicted_sentences[image_name[0]] = predicted_words
+#             del start_token
+#             del prediction
+#
+#         # perform validation
+#         with open(prediction_file, 'w', encoding='utf-8') as f:
+#             for im, p in predicted_sentences.items():
+#                 if p[-1] == END:
+#                     p = p[:-1]
+#                 f.write(im + '\t' + ' '.join(p) + '\n')
+#
+#         score = evaluate(prediction_file, reference_file)
+#         assert False
+#     caption_model.train()
+#     return score
 
 
 def print_info():
@@ -218,7 +269,8 @@ print('training...')
 start0 = time.time()
 for epoch in range(max_epochs):
     start = time.time()
-    # loop over all the training batches
+
+    # loop over all the training batches in the epoch
     for i_batch, batch in enumerate(batch_generator(train_data, batch_size, transform_train, device)):
         opt.zero_grad()
         image, caption, caption_lengths, _ = batch
@@ -229,24 +281,28 @@ for epoch in range(max_epochs):
         loss.backward()
         losses.append(float(loss))
         opt.step()
-
+        break
+    # store epoch results
     avg_losses.append(np.mean(losses[loss_current_ind:]))
     loss_current_ind = epoch
 
     # validation
-    score = validation_step(caption_model, 1)
+    score = validation_step(caption_model)
     scores.append(score)
-    torch.save(caption_model.state_dict(), last_epoch_file)
+    torch.save(caption_model.cpu().state_dict(), last_epoch_file)
+
+    # test termination
     if score['Bleu_4'] <= best_bleu:
         number_up += 1
         if number_up > patience and epoch > min_epochs:
             break
     else:
         number_up = 0
-        torch.save(caption_model.state_dict(), best_epoch_file)
+        torch.save(caption_model.cpu().state_dict(), best_epoch_file)
         best_bleu = scores[-1]['Bleu_4']
         best_epoch = epoch
 
+    # print some info
     end = time.time()
     if epoch % 50 == 0:
         print_info()
@@ -262,4 +318,39 @@ pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.
 pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 pickle.dump(avg_losses, open('./output/avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
 
-torch.save(caption_model.state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+torch.save(caption_model.cpu().state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+
+# if __name__ == "__main__":
+#
+#     # Parse training configuration
+#     parser = argparse.ArgumentParser()
+#
+#     # Model params
+#     parser.add_argument('--txt_file', type=str, required=True, help="Path to a .txt file to train on")
+#     parser.add_argument('--seq_length', type=int, default=30, help='Length of an input sequence')
+#     parser.add_argument('--lstm_num_hidden', type=int, default=128, help='Number of hidden units in the LSTM')
+#     parser.add_argument('--lstm_num_layers', type=int, default=2, help='Number of LSTM layers in the model')
+#     parser.add_argument('--temperature', type=float, default=1.0, help='Number of LSTM layers in the model')
+#
+#     # Training params
+#     parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch')
+#     parser.add_argument('--learning_rate', type=float, default=2e-3, help='Learning rate')
+#
+#     # It is not necessary to implement the following three params, but it may help training.
+#     parser.add_argument('--learning_rate_decay', type=float, default=0.96, help='Learning rate decay fraction')
+#     parser.add_argument('--learning_rate_step', type=int, default=5000, help='Learning rate step')
+#     parser.add_argument('--dropout_keep_prob', type=float, default=1.0, help='Dropout keep probability')
+#
+#     parser.add_argument('--train_steps', type=int, default=1e6, help='Number of training steps')
+#     parser.add_argument('--max_norm', type=float, default=5.0, help='--')
+#
+#     # Misc params
+#     parser.add_argument('--summary_path', type=str, default="./summaries/", help='Output path for summaries')
+#     parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
+#     parser.add_argument('--sample_every', type=int, default=100, help='How often to sample from the model')
+#     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu or cuda')
+#
+#     config = parser.parse_args()
+#
+#     # Train the model
+#     train(config)
