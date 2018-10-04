@@ -60,6 +60,7 @@ class COCO:
         :param image_folder (str): location to the folder that hosts images.
         :return:
         """
+        print("\n\n\n\n\nBLABLASBLBBADKSDFJKFSDKEJFOWJFADKENVAKVNAEKNV\n\n\n\n\n\n\n\n")
         # load dataset
         self.dataset = {}
         self.anns = []

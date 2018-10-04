@@ -113,7 +113,7 @@ class COCO:
         :return:
         """
         for key, value in self.datset['info'].items():
-            print '%s: %s'%(key, value)
+            print('%s: %s' % (key, value))
 
     def getAnnIds(self, imgIds=[], catIds=[], areaRng=[], iscrowd=None):
         """
@@ -254,8 +254,8 @@ class COCO:
                     ax.imshow(np.dstack( (img, mask*0.5) ))
             p = PatchCollection(polygons, facecolors=color, edgecolors=(0,0,0,1), linewidths=3, alpha=0.4)
             ax.add_collection(p)
-        if self.dataset['type'] == 'captions':
-            for ann in anns:
+        # if self.dataset['type'] == 'captions':
+        # for ann in anns:
         # print ann['caption']
 
     def loadRes(self, resFile):

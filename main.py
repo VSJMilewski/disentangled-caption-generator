@@ -1,6 +1,3 @@
-# loadbars to track the run/speed
-from tqdm import tqdm, trange
-
 # numpy for arrays/matrices/mathematical stuff
 import numpy as np
 
@@ -50,28 +47,6 @@ from caption_eval.evaluations_function import *
 from flickr8k_data_processor import *
 from beam_search import Beam
 
-#test if there is a gpu
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = torch.device('cpu')
-print(device)
-
-# hyper parameters
-PAD = '<PAD>'
-START = '<START>'
-END = '<END>'
-UNK = '<UNK>'
-
-vocab_size = 30000
-max_sentence_length = 60
-
-learning_rate = 1e-3
-max_epochs = 1000
-min_epochs = 0
-batch_size = 1  # 5 images per sample, 13x5=65, 25x5=125
-
-embedding_size = 512
-
-patience = 10
 
 resize_size = int(299 / 224 * 256)
 crop_size = 299
@@ -88,95 +63,30 @@ transform_eval = transforms.Compose([
     transforms.Normalize((0.485, 0.456, 0.406),
                          (0.229, 0.224, 0.225))])
 
-#setup paths
-prediction_file = 'output/dev_baseline.pred'
-last_epoch_file = './output/last_flickr8k_baseline_model.pkl'
-best_epoch_file = './output/best_flickr8k_baseline_model.pkl'
-train_images_file = './data/flickr8k/Flickr_8k.trainImages.txt'
-dev_images_file = './data/flickr8k/Flickr_8k.devImages.txt'
-test_images_file = './data/flickr8k/Flickr_8k.testImages.txt'
-base_path_images = './data/flickr8k/Flicker8k_Dataset/'
-reference_file = './data/flickr8k/Flickr8k_references.dev.json'
-captions_file = './data/flickr8k/Flickr8k.token.txt'
-train_vocab_file = './train_flickr8k_vocab_' + str(vocab_size) + '.pkl'
-dev_vocab_file = './dev_flickr8k_vocab_' + str(vocab_size) + '.pkl'
-train_data_file = './data_flickr8k_train.pkl'
-dev_data_file = './data_flickr8k_dev.pkl'
-test_data_file = './data_flickr8k_test.pkl'
 
-
-# setup data stuff
-print('reading data files...')
-start = time.time()
-with open(train_images_file) as f:
-    train_images = f.read().splitlines()
-with open(dev_images_file) as f:
-    dev_images = f.read().splitlines()
-with open(test_images_file) as f:
-    test_images = f.read().splitlines()
-with open(captions_file) as f:
-    annotations = f.read().splitlines()
-end = time.time()
-print("time opening files: " + str(end - start))
-print('create/open vocabulary')
-start = time.time()
-dev_processor = DataProcessor(annotations, dev_images, filename= dev_vocab_file , vocab_size=vocab_size)
-dev_processor.save()
-processor = DataProcessor(annotations, train_images, filename= train_vocab_file, vocab_size=vocab_size)
-processor.save()
-end = time.time()
-print("open vocab: " + str(end - start))
-
-print('create data processing objects...')
-start = time.time()
-train_data = data(base_path_images, train_images, annotations, max_sentence_length, processor, train_data_file, START, END)
-dev_data = data(base_path_images, dev_images, annotations, max_sentence_length, processor, dev_data_file, START, END)
-test_data = data(base_path_images, test_images, annotations, max_sentence_length, processor, test_data_file , START, END)
-end = time.time()
-print("data processor: " + str(end - start))
-
-# create the models
-print('create model...')
-start = time.time()
-caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
-caption_model.train(True)  # probably not needed. better to be safe
-params = list(caption_model.encoder.inception.fc.parameters()) + list(caption_model.decoder.parameters())
-opt = Adam(params, lr=learning_rate)
-end = time.time()
-print("model created: " + str(end - start))
-
-# variables for training
-losses = []
-avg_losses = []
-loss_current_ind = 0
-scores = []
-best_bleu = -1
-best_epoch = -1
-number_up = 0
-
-
-def validation_step(model, beam_size=20):
+def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file,
+                    pad='<PAD>', start='<START>', end='<END>', beam_size=20, device=torch.device('cpu')):
     model.eval()
     with torch.no_grad():
         enc = model.encoder.to(device)
         dec = model.decoder.to(device)
 
         predicted_sentences = dict()
-        for image, image_name in batch_generator_dev(dev_data, 1, transform_eval, device):
+        for image, image_name in batch_generator_dev(data_set, 1, transform_eval, device):
             # Encode
             h0 = enc(image)
 
-            # expand the tensors to be of beamsize
+            # expand the tensors to be of beam-size
             h0 = h0.unsqueeze(0)
             h0 = h0.repeat(1, beam_size, 1)
             c0 = torch.zeros(h0.shape).to(device)
             hidden_state = (h0, c0)
 
             # create the initial beam
-            beam = Beam(beam_size, processor.w2i, cuda=(device.type == 'cuda'))
+            beam = Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, cuda=(device.type == 'cuda'))
 
             # Decode
-            for w_idx in range(max_sentence_length):
+            for w_idx in range(max_seq_length):
                 input_ = beam.get_current_state().view(-1, 1)
                 out, hidden_state = dec(input_, hidden_state)
                 out = F.softmax(out, dim=2)
@@ -194,63 +104,15 @@ def validation_step(model, beam_size=20):
             hyp = beam.get_hyp(k)
             predicted_sentences[image_name[0]] = [processor.i2w[idx.item()] for idx in hyp]
 
-        # perform validation
-        with open(prediction_file, 'w', encoding='utf-8') as f:
-            for im, p in predicted_sentences.items():
-                if p[-1] == END:
-                    p = p[:-1]
-                f.write(im + '\t' + ' '.join(p) + '\n')
-
-    score = evaluate(prediction_file, reference_file)
-    caption_model.train()
+        # Compute score of metrics
+    with open(pred_file, 'w', encoding='utf-8') as f:
+        for im, p in predicted_sentences.items():
+            if p[-1] == end:
+                p = p[:-1]
+            f.write(im + '\t' + ' '.join(p) + '\n')
+    score = evaluate(pred_file, ref_file)
+    model.train()
     return score
-
-
-# def validation_step_backup(model, batch_size=1, beam_size=1):
-#     model.eval()
-#     with torch.no_grad():
-#         enc = model.encoder.to(device)
-#         dec = model.decoder.to(device)
-#
-#         predicted_sentences = dict()
-#         for image, image_name in batch_generator_dev(dev_data, batch_size, transform_eval, device):
-#             # Encode
-#             h0 = enc(image)
-#
-#             # prepare decoder initial hidden state
-#             h0 = h0.unsqueeze(0)
-#             c0 = torch.zeros(h0.shape).to(device)
-#             hidden_state = (h0, c0)
-#
-#             # Decode
-#             start_token = torch.LongTensor([processor.w2i[START]]).to(device)
-#             predicted_words = []
-#             prediction = start_token.view(1, 1)
-#             for w_idx in range(max_sentence_length):
-#                 prediction, hidden_state = dec(prediction, hidden_state)
-#
-#                 index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
-#                 predicted_word = processor.i2w[index_predicted_word]
-#                 predicted_words.append(predicted_word)
-#
-#                 if predicted_word == END:
-#                     break
-#                 prediction = torch.LongTensor([index_predicted_word]).view(1, 1).to(device)
-#             predicted_sentences[image_name[0]] = predicted_words
-#             del start_token
-#             del prediction
-#
-#         # perform validation
-#         with open(prediction_file, 'w', encoding='utf-8') as f:
-#             for im, p in predicted_sentences.items():
-#                 if p[-1] == END:
-#                     p = p[:-1]
-#                 f.write(im + '\t' + ' '.join(p) + '\n')
-#
-#         score = evaluate(prediction_file, reference_file)
-#         assert False
-#     caption_model.train()
-#     return score
 
 
 def print_info():
@@ -258,99 +120,160 @@ def print_info():
         'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80))
 
 
-def print_score(score, time):
+def print_score(score, time_, epoch):
     print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}s'.format(
         epoch, score['Bleu_1'] * 100, score['Bleu_2'] * 100, score['Bleu_3'] * 100, score['Bleu_4'] * 100,
-               score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time))
+               score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time_))
 
 
-# loop over number of epochs
-print('training...')
-start0 = time.time()
-for epoch in range(max_epochs):
-    start = time.time()
-
-    # loop over all the training batches in the epoch
-    for i_batch, batch in enumerate(batch_generator(train_data, batch_size, transform_train, device)):
-        opt.zero_grad()
-        image, caption, caption_lengths, _ = batch
-        image = image.to(device)
-        caption = caption.to(device)
-        caption_lengths = caption_lengths.to(device)
-        loss = caption_model(image, caption, caption_lengths)
-        loss.backward()
-        losses.append(float(loss))
-        opt.step()
-        break
-    # store epoch results
-    avg_losses.append(np.mean(losses[loss_current_ind:]))
-    loss_current_ind = epoch
-
-    # validation
-    score = validation_step(caption_model)
-    scores.append(score)
-    torch.save(caption_model.cpu().state_dict(), last_epoch_file)
-
-    # test termination
-    if score['Bleu_4'] <= best_bleu:
-        number_up += 1
-        if number_up > patience and epoch > min_epochs:
-            break
+def train(config):
+    # test if there is a gpu
+    if config.device:
+        device = torch.device(config.device)
     else:
-        number_up = 0
-        torch.save(caption_model.cpu().state_dict(), best_epoch_file)
-        best_bleu = scores[-1]['Bleu_4']
-        best_epoch = epoch
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # print some info
-    end = time.time()
-    if epoch % 50 == 0:
-        print_info()
-    print_score(scores[-1], end - start)
+    PAD = config.pad
+    START = config.sos
+    END = config.eos
+    UNK = config.unk
+    vocab_size = config.vocab_size
+    max_seq_length = config.max_seq_length
+    learning_rate = config.learning_rate
+    max_epochs = config.max_epochs
+    batch_size = config.batch_size  # 5 images per sample, 13x5=65, 25x5=125
+    embedding_size = config.num_hidden
+    patience = config.patience
+    base_output_path = config.output_path
+    base_data_path = config.data_path
+    base_pickle_path = config.pickle_path
 
-print_info()
-print('\n\n\t\t --- Best Epoch: ---')
-print_info()
-print_score(scores[best_epoch], time.time() - start0)
-print('=' * 80)
+    # setup paths
+    prediction_file = os.path.join(base_output_path, 'dev_baseline.pred')
+    last_epoch_file = os.path.join(base_output_path, 'last_flickr8k_baseline_model.pkl')
+    best_epoch_file = os.path.join(base_output_path, 'best_flickr8k_baseline_model.pkl')
+    train_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.trainImages.txt')
+    dev_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.devImages.txt')
+    base_path_images = os.path.join(base_data_path, 'flickr8k/Flicker8k_Dataset/')
+    reference_file = os.path.join(base_data_path, 'flickr8k/Flickr8k_references.dev.json')
+    captions_file = os.path.join(base_data_path, 'flickr8k/Flickr8k.token.txt')
+    train_vocab_file = os.path.join(base_pickle_path, 'train_flickr8k_vocab_{}.pkl'.format(vocab_size))
+    train_data_file = os.path.join(base_pickle_path, 'data_flickr8k_train.pkl')
+    dev_data_file = os.path.join(base_pickle_path, 'data_flickr8k_dev.pkl')
 
-pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-pickle.dump(avg_losses, open('./output/avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+    # setup data stuff
+    with open(train_images_file) as f:
+        train_images = f.read().splitlines()
+    with open(dev_images_file) as f:
+        dev_images = f.read().splitlines()
+    with open(captions_file) as f:
+        annotations = f.read().splitlines()
 
-torch.save(caption_model.cpu().state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+    # data processor for vocab and their index mappings
+    processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=vocab_size,
+                              pad=PAD, start=START, end=END, unk=UNK)
+    processor.save()
 
-# if __name__ == "__main__":
-#
-#     # Parse training configuration
-#     parser = argparse.ArgumentParser()
-#
-#     # Model params
-#     parser.add_argument('--txt_file', type=str, required=True, help="Path to a .txt file to train on")
-#     parser.add_argument('--seq_length', type=int, default=30, help='Length of an input sequence')
-#     parser.add_argument('--lstm_num_hidden', type=int, default=128, help='Number of hidden units in the LSTM')
-#     parser.add_argument('--lstm_num_layers', type=int, default=2, help='Number of LSTM layers in the model')
-#     parser.add_argument('--temperature', type=float, default=1.0, help='Number of LSTM layers in the model')
-#
-#     # Training params
-#     parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch')
-#     parser.add_argument('--learning_rate', type=float, default=2e-3, help='Learning rate')
-#
-#     # It is not necessary to implement the following three params, but it may help training.
-#     parser.add_argument('--learning_rate_decay', type=float, default=0.96, help='Learning rate decay fraction')
-#     parser.add_argument('--learning_rate_step', type=int, default=5000, help='Learning rate step')
-#     parser.add_argument('--dropout_keep_prob', type=float, default=1.0, help='Dropout keep probability')
-#
-#     parser.add_argument('--train_steps', type=int, default=1e6, help='Number of training steps')
-#     parser.add_argument('--max_norm', type=float, default=5.0, help='--')
-#
-#     # Misc params
-#     parser.add_argument('--summary_path', type=str, default="./summaries/", help='Output path for summaries')
-#     parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
-#     parser.add_argument('--sample_every', type=int, default=100, help='How often to sample from the model')
-#     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu or cuda')
-#
-#     config = parser.parse_args()
-#
-#     # Train the model
-#     train(config)
+    # data files containing the data and handling batching
+    train_data = data(base_path_images, train_images, annotations, max_seq_length, processor, train_data_file,
+                      START, END)
+    dev_data = data(base_path_images, dev_images, annotations, max_seq_length, processor, dev_data_file, START,
+                    END)
+
+    # create the models
+    caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
+    params = list(caption_model.encoder.inception.fc.parameters()) + list(caption_model.decoder.parameters())
+    opt = Adam(params, lr=learning_rate)
+
+    # Start training
+    losses = []
+    avg_losses = dict()
+    loss_current_ind = 0
+    scores = []
+    best_bleu = -1
+    best_epoch = -1
+    number_up = 0
+    print('training started!')
+    start0 = time.time()
+    for epoch in range(max_epochs):
+        start = time.time()
+
+        # loop over all the training batches in the epoch
+        for i_batch, batch in enumerate(batch_generator(train_data, batch_size, transform_train, device)):
+            opt.zero_grad()
+            image, caption, caption_lengths, _ = batch
+            image = image.to(device)
+            caption = caption.to(device)
+            caption_lengths = caption_lengths.to(device)
+            loss = caption_model(image, caption, caption_lengths)
+            loss.backward()
+            losses.append(float(loss))
+            opt.step()
+        # store epoch results
+        avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
+        loss_current_ind = len(losses)
+
+        # validation
+        score = validation_step(caption_model, dev_data, processor, max_seq_length,
+                                prediction_file, reference_file, pad=PAD, start=START, end=END, device=device)
+        scores.append(score)
+        torch.save(caption_model.cpu().state_dict(), last_epoch_file)
+
+        # test termination
+        if score['Bleu_4'] <= best_bleu:
+            number_up += 1
+            if number_up > patience:
+                break
+        else:
+            number_up = 0
+            torch.save(caption_model.cpu().state_dict(), best_epoch_file)
+            best_bleu = scores[-1]['Bleu_4']
+            best_epoch = epoch
+
+        # print some info
+        end = time.time()
+        if epoch % 50 == 0:
+            print_info()
+        print_score(scores[-1], end - start)
+
+    print_info()
+    print('\n\n\t\t --- Best Epoch: ---')
+    print_info()
+    print_score(scores[best_epoch], time.time() - start0)
+    print('=' * 80)
+
+    pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+    pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+    pickle.dump(avg_losses, open('./output/avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
+
+    torch.save(caption_model.cpu().state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+
+
+if __name__ == "__main__":
+    # Parse training configuration
+    parser = argparse.ArgumentParser()
+
+    # Model params
+    parser.add_argument('--sos', type=str, default='<START>', help='Default start of sentence token')
+    parser.add_argument('--eos', type=str, default='<END>', help='Default end of sentence token')
+    parser.add_argument('--pad', type=str, default='<PAD>', help='Default padding token')
+    parser.add_argument('--unk', type=str, default='<UNK>', help='Default unknown token')
+    parser.add_argument('--vocab_size', type=int, default=30000, help='Max size of the vocabulary')
+    parser.add_argument('--patience', type=int, default=10, help='Patience before terminating')
+    parser.add_argument('--max_seq_length', type=int, default=60, help='Length of an input sequence')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
+    parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
+    parser.add_argument('--batch_size', type=int, default=25, help='Number of samples in batch, 5 sentences per sample')
+    parser.add_argument('--dropout_prob', type=float, default=1.0, help='Dropout keep probability')
+    parser.add_argument('--max_epochs', type=int, default=1000, help='Number of training steps')
+    parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
+    parser.add_argument('--output_path', type=str, default='output', help='location where to store the output')
+    parser.add_argument('--data_path', type=str, default='data', help='location where to store data')
+    parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
+    parser.add_argument('--device', type=str, default=None, help='On which device to run, cpu, cuda or None')
+
+    config = parser.parse_args()
+
+    # Train the model
+    train(config)

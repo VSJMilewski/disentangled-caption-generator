@@ -15,10 +15,8 @@ class data():
         self.START = start
         self.END = end
         if os.path.isfile(filename):
-            print('open data pickle.')
-            self.samples = pickle.load(open(filename,'rb'))
+            self.samples = pickle.load(open(filename, 'rb'))
         else:
-            print('create data pickle.')
             self.samples = self.create_samples(annotations, processor)
         pickle.dump(self.samples,open(filename,'wb'))
 

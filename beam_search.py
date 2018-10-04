@@ -19,13 +19,13 @@ import torch
 class Beam(object):
     """Ordered beam of candidate outputs."""
 
-    def __init__(self, size, vocab, cuda=False):
+    def __init__(self, size, vocab, pad='<PAD>', start='<START>', end='<END>', cuda=False):
         """Initialize params."""
         self.size = size
         self.done = False
-        self.pad = vocab['<PAD>']
-        self.bos = vocab['<START>']
-        self.eos = vocab['<END>']
+        self.pad = vocab[pad]
+        self.bos = vocab[start]
+        self.eos = vocab[end]
         self.tt = torch.cuda if cuda else torch
 
         # The score for each translation on the beam.
