@@ -256,9 +256,19 @@ def train():
     print_score(scores[best_epoch], time.time() - start0, best_epoch)
     print('=' * 80)
 
-    pickle.dump(scores, open(os.path.join(base_output_path, 'scores_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
-    pickle.dump(losses, open(os.path.join(base_output_path, 'losses_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
-    pickle.dump(avg_losses, open(os.path.join(base_output_path, 'avg_losses_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
+    pickle.dump(scores, open(os.path.join(base_output_path,
+                                          'scores_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset, epoch,
+                                                                                                config.beam_size)),
+                             'wb'))
+    pickle.dump(losses, open(os.path.join(base_output_path,
+                                          'losses_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset, epoch,
+                                                                                                config.beam_size)),
+                             'wb'))
+    pickle.dump(avg_losses, open(os.path.join(base_output_path,
+                                              'avg_losses_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset,
+                                                                                                        epoch,
+                                                                                                        config.beam_size)),
+                                 'wb'))
 
 
 if __name__ == "__main__":
