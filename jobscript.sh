@@ -18,10 +18,11 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:0 &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 20 --dataset flickr8k --device cuda:1 &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:2 &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 20 --dataset flickr30k --device cuda:3 &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:0 > ouput/baseline_flickr8k_beam1.out &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 20 --dataset flickr8k --device cuda:1 > ouput/baseline_flickr8k_beam20.out &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:2 > ouput/baseline_flickr30k_beam1.out &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 20 --dataset flickr30k --device cuda:3 > ouput/baseline_flickr30k_beam20.out &
+wait
 
 echo ""
 echo ""
