@@ -157,7 +157,6 @@ def train(config):
     base_data_path = config.data_path
     base_pickle_path = config.pickle_path
 
-    # setup paths:
     # temporary files
     prediction_file = os.path.join(base_output_path, 'dev_baseline.pred')
 
@@ -273,9 +272,9 @@ def train(config):
     print_score(scores[best_epoch], time.time() - start0)
     print('=' * 80)
 
-    pickle.dump(scores, open(os.path.join(base_output_path, 'scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
-    pickle.dump(losses, open(os.path.join(base_output_path, 'losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
-    pickle.dump(avg_losses, open(os.path.join(base_output_path, 'avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
+    pickle.dump(scores, open(os.path.join(base_output_path, 'scores_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
+    pickle.dump(losses, open(os.path.join(base_output_path, 'losses_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
+    pickle.dump(avg_losses, open(os.path.join(base_output_path, 'avg_losses_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
 
 
 if __name__ == "__main__":
@@ -304,7 +303,7 @@ if __name__ == "__main__":
     parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
-    parser.add_argument('--device', type=str, default=None, help='On which device to run, cpu, cuda or None')
+    parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
 
     config = parser.parse_args()
     device = torch.device(config.device)
