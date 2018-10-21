@@ -11,35 +11,17 @@ import os
 import time
 import argparse
 
-
 # import other files
-from model import CaptionModel, BinaryCaptionModel
+from model import CaptionModel  # , BinaryCaptionModel
 from vocab_flickr8k import *
 from caption_eval.evaluations_function import *
 from flickr8k_data_processor import *
 from beam_search import Beam
 
 
-resize_size = int(299 / 224 * 256)
-crop_size = 299
-transform_train = transforms.Compose([
-    transforms.RandomResizedCrop(crop_size),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.485, 0.456, 0.406),
-                         (0.229, 0.224, 0.225))])
-transform_eval = transforms.Compose([
-    transforms.Resize(resize_size),
-    transforms.CenterCrop(crop_size),
-    transforms.ToTensor(),
-    transforms.Normalize((0.485, 0.456, 0.406),
-                         (0.229, 0.224, 0.225))])
-
-
 def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file,
                     pad='<PAD>', start='<START>', end='<END>', batch_size=1, beam_size=1):
     model.eval()
-    print('val')
     with torch.no_grad():
         enc = model.encoder.to(device)
         dec = model.decoder.to(device)
@@ -55,40 +37,35 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
             c0 = tt.zeros(h0.shape)
             hidden_state = (h0, c0)
 
+            b_size = image.shape[0]
+
             # create the initial beam
             beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, cuda=(device.type == 'cuda'))
-                    for _ in range(batch_size)]
+                    for _ in range(b_size)]
 
-            batch_idx = list(range(batch_size)) # indicating index for every sample in the batch
-            remaining_sents = batch_size # number of samples in batch
+            batch_idx = list(range(b_size))  # indicating index for every sample in the batch
+            remaining_sents = b_size  # number of samples in batch
 
             # Decode
             for w_idx in range(max_seq_length):
                 input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
-                # input_ = beam.get_current_state().view(-1, 1)
                 out, hidden_state = dec(input_, hidden_state)
                 out = F.softmax(out, dim=2)
 
                 # process lstm step in beam search
-                word_lk = out.view(
-                    beam_size,
-                    remaining_sents,
-                    -1
-                ).transpose(0, 1).contiguous()
-                active = [] # list of not finisched samples
-                for b in range(batch_size):
+                word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()
+                active = []  # list of not finisched samples
+                for b in range(b_size):
                     if beam[b].done:
                         continue
 
                     idx = batch_idx[b]
                     if not beam[b].advance(word_lk.data[idx]):  # returns true if complete
                         active.append(b)
-                # active = not beam.advance(out.squeeze(0))  # returns true if complete
 
                     for dec_state in hidden_state:  # iterate over h, c
                         sent_states = dec_state.view(-1, beam_size, remaining_sents, dec_state.size(2))[:, :, idx]
                         sent_states.data.copy_(sent_states.data.index_select(1, beam[b].get_current_origin()))
-                    # dec_state.data.copy_(dec_state.data.index_select(1, beam.get_current_origin()))
 
                 # test if the beam is finished
                 if not active:
@@ -106,24 +83,21 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
                     new_size[-2] = new_size[-2] * len(active_idx) // remaining_sents
                     return Variable(view.index_select(1, active_idx).view(*new_size))
                 hidden_state = (update_active(hidden_state[0]), update_active(hidden_state[1]))
-                # dec_out = update_active(dec_out)
-                # context = update_active(context)
-
                 remaining_sents = len(active)
 
             # select the best hypothesis
-            for b in range(batch_size):
+            for b in range(b_size):
                 score_, k = beam[b].get_best()
                 hyp = beam[b].get_hyp(k)
                 predicted_sentences[image_name[b]] = [processor.i2w[idx.item()] for idx in hyp]
 
         # Compute score of metrics
-    with open(pred_file, 'w', encoding='utf-8') as f:
-        for im, p in predicted_sentences.items():
-            if p[-1] == end:
-                p = p[:-1]
-            f.write(im + '\t' + ' '.join(p) + '\n')
-    score = evaluate(pred_file, ref_file)
+        with open(pred_file, 'w', encoding='utf-8') as f:
+            for im, p in predicted_sentences.items():
+                if p[-1] == end:
+                    p = p[:-1]
+                f.write(im + '\t' + ' '.join(p) + '\n')
+        score = evaluate(pred_file, ref_file)
     model.train()
     return score
 
@@ -139,7 +113,7 @@ def print_score(score, time_, epoch):
                score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time_))
 
 
-def train(config):
+def train():
     PAD = config.pad
     START = config.sos
     END = config.eos
@@ -169,8 +143,12 @@ def train(config):
     train_data_file = os.path.join(base_pickle_path, 'data_{}_train.pkl'.format(config.dataset))
     dev_data_file = os.path.join(base_pickle_path, 'data_{}_dev.pkl'.format(config.dataset))
 
-
     # data files
+    train_images_file = None
+    dev_images_file = None
+    base_path_images = None
+    reference_file = None
+    captions_file = None
     if config.dataset == 'flickr8k':
         train_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.trainImages.txt')
         dev_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.devImages.txt')
@@ -200,16 +178,18 @@ def train(config):
     processor.save()
 
     # data files containing the data and handling batching
-    train_data = data(base_path_images, train_images, annotations, max_seq_length, processor, train_data_file,
-                      START, END)
-    dev_data = data(base_path_images, dev_images, annotations, max_seq_length, processor, dev_data_file, START,
-                    END)
+    train_data = data(base_path_images, train_images, annotations, max_seq_length, processor, train_data_file, START,
+                      END)
+    dev_data = data(base_path_images, dev_images, annotations, max_seq_length, processor, dev_data_file, START, END)
 
     # create the models
+    model = None
     if config.model == 'BASELINE':
         model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
+    # elif config.model == 'BINARY':
+    #     model = BinaryCaptionModel(embedding_size, processor.vocab_size, device).to(device)
     else:
-        model = BinaryCaptionModel(embedding_size, processor.vocab_size, device).to(device)
+        exit('not an existing model!')
     params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
     opt = Adam(params, lr=learning_rate)
 
@@ -237,7 +217,6 @@ def train(config):
             loss.backward()
             losses.append(float(loss))
             opt.step()
-            break
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
         loss_current_ind = len(losses)
@@ -245,7 +224,7 @@ def train(config):
         # validation
         score = validation_step(model, dev_data, processor, max_seq_length, prediction_file, reference_file,
                                 beam_size=beam_size, batch_size=eval_batch_size,
-                                pad=PAD, start=START, end=END, device=device)
+                                pad=PAD, start=START, end=END)
         scores.append(score)
         torch.save(model.cpu().state_dict(), last_epoch_file)
 
@@ -264,12 +243,12 @@ def train(config):
         end = time.time()
         if epoch % 50 == 0:
             print_info()
-        print_score(scores[-1], end - start)
+        print_score(scores[-1], end - start, epoch)
 
     print_info()
     print('\n\n\t\t --- Best Epoch: ---')
     print_info()
-    print_score(scores[best_epoch], time.time() - start0)
+    print_score(scores[best_epoch], time.time() - start0, best_epoch)
     print('=' * 80)
 
     pickle.dump(scores, open(os.path.join(base_output_path, 'scores_{}_baseline_model_epoch_{}.pkl'.format(config.dataset, epoch)), 'wb'))
@@ -309,6 +288,21 @@ if __name__ == "__main__":
     device = torch.device(config.device)
     tt = torch.cuda if config.device != 'cpu' else torch
 
+    # globals for data transformations
+    resize_size = int(299 / 224 * 256)
+    crop_size = 299
+    transform_train = transforms.Compose([
+        transforms.RandomResizedCrop(crop_size),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))])
+    transform_eval = transforms.Compose([
+        transforms.Resize(resize_size),
+        transforms.CenterCrop(crop_size),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))])
 
     # Train the model
-    train(config)
+    train()
