@@ -1,47 +1,19 @@
-# numpy for arrays/matrices/mathematical stuff
 import numpy as np
-
-# nltk for tokenizer
-from nltk.tokenize import wordpunct_tokenize
-
-# torch for the NN stuff
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
-
-# torch tools for data processing
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
 import pycocotools #cocoAPI
-
-# torchvision for the image dataset and image processing
-from torchvision.datasets import CocoCaptions
 from torchvision import transforms
-from torchvision import models
-
-#coco captions evaluation
-# from pycocotools.coco import COCO
-# from pycocoevalcap.eval import COCOEvalCap
-
-# packages for plotting
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-import skimage.io as io
-
-# additional stuff
 import pickle
-from collections import Counter
-from collections import defaultdict
 import os
 import time
+import argparse
 
-import json
-from json import encoder
-encoder.FLOAT_REPR = lambda o: format(o, '.3f')
 
 # import other files
-from model import *
+from model import CaptionModel, BinaryCaptionModel
 from vocab_flickr8k import *
 from caption_eval.evaluations_function import *
 from flickr8k_data_processor import *
@@ -65,44 +37,85 @@ transform_eval = transforms.Compose([
 
 
 def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file,
-                    pad='<PAD>', start='<START>', end='<END>', beam_size=20, device=torch.device('cpu')):
+                    pad='<PAD>', start='<START>', end='<END>', batch_size=1, beam_size=1):
     model.eval()
+    print('val')
     with torch.no_grad():
         enc = model.encoder.to(device)
         dec = model.decoder.to(device)
 
         predicted_sentences = dict()
-        for image, image_name in batch_generator_dev(data_set, 1, transform_eval, device):
+        for image, image_name in batch_generator_dev(data_set, batch_size, transform_eval, device):
             # Encode
             h0 = enc(image)
 
             # expand the tensors to be of beam-size
             h0 = h0.unsqueeze(0)
             h0 = h0.repeat(1, beam_size, 1)
-            c0 = torch.zeros(h0.shape).to(device)
+            c0 = tt.zeros(h0.shape)
             hidden_state = (h0, c0)
 
             # create the initial beam
-            beam = Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, cuda=(device.type == 'cuda'))
+            beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, cuda=(device.type == 'cuda'))
+                    for _ in range(batch_size)]
+
+            batch_idx = list(range(batch_size)) # indicating index for every sample in the batch
+            remaining_sents = batch_size # number of samples in batch
 
             # Decode
             for w_idx in range(max_seq_length):
-                input_ = beam.get_current_state().view(-1, 1)
+                input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
+                # input_ = beam.get_current_state().view(-1, 1)
                 out, hidden_state = dec(input_, hidden_state)
                 out = F.softmax(out, dim=2)
 
                 # process lstm step in beam search
-                active = not beam.advance(out.squeeze(0))  # returns true if complete
-                for dec_state in hidden_state:  # iterate over h, c
-                    dec_state.data.copy_(dec_state.data.index_select(1, beam.get_current_origin()))
+                word_lk = out.view(
+                    beam_size,
+                    remaining_sents,
+                    -1
+                ).transpose(0, 1).contiguous()
+                active = [] # list of not finisched samples
+                for b in range(batch_size):
+                    if beam[b].done:
+                        continue
+
+                    idx = batch_idx[b]
+                    if not beam[b].advance(word_lk.data[idx]):  # returns true if complete
+                        active.append(b)
+                # active = not beam.advance(out.squeeze(0))  # returns true if complete
+
+                    for dec_state in hidden_state:  # iterate over h, c
+                        sent_states = dec_state.view(-1, beam_size, remaining_sents, dec_state.size(2))[:, :, idx]
+                        sent_states.data.copy_(sent_states.data.index_select(1, beam[b].get_current_origin()))
+                    # dec_state.data.copy_(dec_state.data.index_select(1, beam.get_current_origin()))
+
                 # test if the beam is finished
                 if not active:
                     break
 
+                # in this section, the sentences that are still active are
+                # compacted so that the decoder is not run on completed sentences
+                active_idx = tt.LongTensor([batch_idx[k] for k in active])
+                batch_idx = {beam: idx for idx, beam in enumerate(active)}
+
+                def update_active(t):
+                    # select only the remaining active sentences
+                    view = t.data.view(-1, remaining_sents, dec.hidden_size)
+                    new_size = list(t.size())
+                    new_size[-2] = new_size[-2] * len(active_idx) // remaining_sents
+                    return Variable(view.index_select(1, active_idx).view(*new_size))
+                hidden_state = (update_active(hidden_state[0]), update_active(hidden_state[1]))
+                # dec_out = update_active(dec_out)
+                # context = update_active(context)
+
+                remaining_sents = len(active)
+
             # select the best hypothesis
-            score_, k = beam.get_best()
-            hyp = beam.get_hyp(k)
-            predicted_sentences[image_name[0]] = [processor.i2w[idx.item()] for idx in hyp]
+            for b in range(batch_size):
+                score_, k = beam[b].get_best()
+                hyp = beam[b].get_hyp(k)
+                predicted_sentences[image_name[b]] = [processor.i2w[idx.item()] for idx in hyp]
 
         # Compute score of metrics
     with open(pred_file, 'w', encoding='utf-8') as f:
@@ -127,12 +140,6 @@ def print_score(score, time_, epoch):
 
 
 def train(config):
-    # test if there is a gpu
-    if config.device:
-        device = torch.device(config.device)
-    else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     PAD = config.pad
     START = config.sos
     END = config.eos
@@ -142,24 +149,43 @@ def train(config):
     learning_rate = config.learning_rate
     max_epochs = config.max_epochs
     batch_size = config.batch_size  # 5 images per sample, 13x5=65, 25x5=125
+    eval_batch_size = config.eval_batch_size
+    beam_size = config.beam_size
     embedding_size = config.num_hidden
     patience = config.patience
     base_output_path = config.output_path
     base_data_path = config.data_path
     base_pickle_path = config.pickle_path
 
-    # setup paths
+    # setup paths:
+    # temporary files
     prediction_file = os.path.join(base_output_path, 'dev_baseline.pred')
-    last_epoch_file = os.path.join(base_output_path, 'last_flickr8k_baseline_model.pkl')
-    best_epoch_file = os.path.join(base_output_path, 'best_flickr8k_baseline_model.pkl')
-    train_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.trainImages.txt')
-    dev_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.devImages.txt')
-    base_path_images = os.path.join(base_data_path, 'flickr8k/Flicker8k_Dataset/')
-    reference_file = os.path.join(base_data_path, 'flickr8k/Flickr8k_references.dev.json')
-    captions_file = os.path.join(base_data_path, 'flickr8k/Flickr8k.token.txt')
-    train_vocab_file = os.path.join(base_pickle_path, 'train_flickr8k_vocab_{}.pkl'.format(vocab_size))
-    train_data_file = os.path.join(base_pickle_path, 'data_flickr8k_train.pkl')
-    dev_data_file = os.path.join(base_pickle_path, 'data_flickr8k_dev.pkl')
+
+    # output files
+    last_epoch_file = os.path.join(base_output_path, 'last_{}_baseline_model.pkl'.format(config.dataset))
+    best_epoch_file = os.path.join(base_output_path, 'best_{}_baseline_model.pkl'.format(config.dataset))
+
+    # pickle files
+    train_vocab_file = os.path.join(base_pickle_path, 'train_{}_vocab_{}.pkl'.format(config.dataset, vocab_size))
+    train_data_file = os.path.join(base_pickle_path, 'data_{}_train.pkl'.format(config.dataset))
+    dev_data_file = os.path.join(base_pickle_path, 'data_{}_dev.pkl'.format(config.dataset))
+
+
+    # data files
+    if config.dataset == 'flickr8k':
+        train_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.trainImages.txt')
+        dev_images_file = os.path.join(base_data_path, 'flickr8k/Flickr_8k.devImages.txt')
+        base_path_images = os.path.join(base_data_path, 'flickr8k/Flicker8k_Dataset/')
+        reference_file = os.path.join(base_data_path, 'flickr8k/Flickr8k_references.dev.json')
+        captions_file = os.path.join(base_data_path, 'flickr8k/Flickr8k.token.txt')
+    elif config.dataset == 'flickr30k':
+        train_images_file = os.path.join(base_data_path, 'flickr30k/flickr30k.trainImages.txt')
+        dev_images_file = os.path.join(base_data_path, 'flickr30k/flickr30k.devImages.txt')
+        base_path_images = os.path.join(base_data_path, 'flickr30k/flickr30k_images/')
+        reference_file = os.path.join(base_data_path, 'flickr30k/flickr30k_references.dev.json')
+        captions_file = os.path.join(base_data_path, 'flickr30k/results_20130124.token')
+    else:
+        exit('Unknown dataset')
 
     # setup data stuff
     with open(train_images_file) as f:
@@ -181,8 +207,11 @@ def train(config):
                     END)
 
     # create the models
-    caption_model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
-    params = list(caption_model.encoder.inception.fc.parameters()) + list(caption_model.decoder.parameters())
+    if config.model == 'BASELINE':
+        model = CaptionModel(embedding_size, processor.vocab_size, device).to(device)
+    else:
+        model = BinaryCaptionModel(embedding_size, processor.vocab_size, device).to(device)
+    params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
     opt = Adam(params, lr=learning_rate)
 
     # Start training
@@ -205,19 +234,21 @@ def train(config):
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
-            loss = caption_model(image, caption, caption_lengths)
+            loss = model(image, caption, caption_lengths)
             loss.backward()
             losses.append(float(loss))
             opt.step()
+            break
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
         loss_current_ind = len(losses)
 
         # validation
-        score = validation_step(caption_model, dev_data, processor, max_seq_length,
-                                prediction_file, reference_file, pad=PAD, start=START, end=END, device=device)
+        score = validation_step(model, dev_data, processor, max_seq_length, prediction_file, reference_file,
+                                beam_size=beam_size, batch_size=eval_batch_size,
+                                pad=PAD, start=START, end=END, device=device)
         scores.append(score)
-        torch.save(caption_model.cpu().state_dict(), last_epoch_file)
+        torch.save(model.cpu().state_dict(), last_epoch_file)
 
         # test termination
         if score['Bleu_4'] <= best_bleu:
@@ -226,7 +257,7 @@ def train(config):
                 break
         else:
             number_up = 0
-            torch.save(caption_model.cpu().state_dict(), best_epoch_file)
+            torch.save(model.cpu().state_dict(), best_epoch_file)
             best_bleu = scores[-1]['Bleu_4']
             best_epoch = epoch
 
@@ -242,11 +273,9 @@ def train(config):
     print_score(scores[best_epoch], time.time() - start0)
     print('=' * 80)
 
-    pickle.dump(scores, open('./output/scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-    pickle.dump(losses, open('./output/losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-    pickle.dump(avg_losses, open('./output/avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch), 'wb'))
-
-    torch.save(caption_model.cpu().state_dict(), './output/last_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch))
+    pickle.dump(scores, open(os.path.join(base_output_path, 'scores_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
+    pickle.dump(losses, open(os.path.join(base_output_path, 'losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
+    pickle.dump(avg_losses, open(os.path.join(base_output_path, 'avg_losses_flickr8k_baseline_model_epoch_{}.pkl'.format(epoch)), 'wb'))
 
 
 if __name__ == "__main__":
@@ -265,15 +294,22 @@ if __name__ == "__main__":
     parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
     parser.add_argument('--batch_size', type=int, default=25, help='Number of samples in batch, 5 sentences per sample')
+    parser.add_argument('--eval_batch_size', type=int, default=256, help='Number of samples in eval batch')
+    parser.add_argument('--beam_size', type=int, default=20, help='size of the beam during eval, use 1 for greedy')
     parser.add_argument('--dropout_prob', type=float, default=1.0, help='Dropout keep probability')
     parser.add_argument('--max_epochs', type=int, default=1000, help='Number of training steps')
     parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
     parser.add_argument('--output_path', type=str, default='output', help='location where to store the output')
     parser.add_argument('--data_path', type=str, default='data', help='location where to store data')
     parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
+    parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
+    parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default=None, help='On which device to run, cpu, cuda or None')
 
     config = parser.parse_args()
+    device = torch.device(config.device)
+    tt = torch.cuda if config.device != 'cpu' else torch
+
 
     # Train the model
     train(config)
