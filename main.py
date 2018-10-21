@@ -39,7 +39,7 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
             # expand the tensors to be of beam-size
             h0 = h0.unsqueeze(0)
             h0 = h0.repeat(1, beam_size, 1)
-            c0 = tt.zeros(h0.shape)
+            c0 = torch.zeros(h0.shape).to(device)
             hidden_state = (h0, c0)
 
             b_size = image.shape[0]
