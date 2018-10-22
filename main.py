@@ -45,7 +45,7 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
             b_size = image.shape[0]
 
             # create the initial beam
-            beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, cuda=(device.type == 'cuda'))
+            beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, device=device)
                     for _ in range(b_size)]
 
             batch_idx = list(range(b_size))  # indicating index for every sample in the batch
@@ -78,7 +78,7 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
 
                 # in this section, the sentences that are still active are
                 # compacted so that the decoder is not run on completed sentences
-                active_idx = tt.LongTensor([batch_idx[k] for k in active])
+                active_idx = torch.LongTensor([batch_idx[k] for k in active]).to(device)
                 batch_idx = {beam: idx for idx, beam in enumerate(active)}
 
                 def update_active(t):
@@ -140,8 +140,12 @@ def train():
     prediction_file = os.path.join(base_output_path, 'dev_baseline.pred')
 
     # output files
-    last_epoch_file = os.path.join(base_output_path, 'last_{}_baseline_model.pkl'.format(config.dataset))
-    best_epoch_file = os.path.join(base_output_path, 'best_{}_baseline_model.pkl'.format(config.dataset))
+    last_epoch_file = os.path.join(base_output_path, 'last_{}_beam{}_{}.pkl'.format(config.dataset,
+                                                                                    config.beam_size,
+                                                                                    config.model))
+    best_epoch_file = os.path.join(base_output_path, 'best_{}_beam{}_{}.pkl'.format(config.dataset,
+                                                                                    config.beam_size,
+                                                                                    config.model))
 
     # pickle files
     train_vocab_file = os.path.join(base_pickle_path, 'train_{}_vocab_{}.pkl'.format(config.dataset, vocab_size))
@@ -301,7 +305,6 @@ if __name__ == "__main__":
 
     config = parser.parse_args()
     device = torch.device(config.device)
-    tt = torch.cuda if config.device != 'cpu' else torch
 
     # globals for data transformations
     resize_size = int(299 / 224 * 256)
