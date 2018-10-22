@@ -8,13 +8,14 @@ module load cuDNN/7.3.1-CUDA-9.0.176
 
 
 echo "creating a tar for the data and pickles"
-tar zcf $HOME/multimodal-descriptions/data.tar.gz -C $HOME/multimodal-descriptions/ data pickles
+tar zcf $HOME/multimodal-descriptions/data.tar.gz -C $HOME/multimodal-descriptions/ data
 #echo "moving the pickles to scratch"
 #cp $HOME/multimodal-descriptions/*.pkl "$TMPDIR"
 echo "untar the data into scratch"
 tar zxf $HOME/multimodal-descriptions/data.tar.gz -C "$TMPDIR"
 echo "make output dir"
 mkdir "$TMPDIR"/output
+mkdir "$TMPDIR"/pickles
 
 echo "move into scratch"
 cd "$TMPDIR"

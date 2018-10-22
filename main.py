@@ -282,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument('--unk', type=str, default='<UNK>', help='Default unknown token')
     parser.add_argument('--vocab_size', type=int, default=30000, help='Max size of the vocabulary')
     parser.add_argument('--patience', type=int, default=10, help='Patience before terminating')
-    parser.add_argument('--max_seq_length', type=int, default=60, help='Length of an input sequence')
+    parser.add_argument('--max_seq_length', type=int, default=100, help='Length of an input sequence')
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
