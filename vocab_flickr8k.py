@@ -25,6 +25,7 @@ class DataProcessor():
             self.vocab, self.vocab_size, self.vocab_weight = self.load()
         else:
             self.vocab, self.vocab_size, self.vocab_weight = self.build_vocab(annotations, train_data)
+            self.save()
         self.w2i, self.i2w = self.build_dicts()
 
     def build_dicts(self):

@@ -137,7 +137,9 @@ def train():
     base_pickle_path = config.pickle_path
 
     # temporary files
-    prediction_file = os.path.join(base_output_path, 'dev_baseline.pred')
+    prediction_file = os.path.join(base_output_path, '{}_{}_beam{}.pred'.format(config.model,
+                                                                                config.dataset,
+                                                                                config.beam_size))
 
     # output files
     last_epoch_file = os.path.join(base_output_path, 'last_{}_beam{}_{}.pkl'.format(config.dataset,
@@ -184,7 +186,6 @@ def train():
     # data processor for vocab and their index mappings
     processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=vocab_size,
                               pad=PAD, start=START, end=END, unk=UNK)
-    processor.save()
 
     # data files containing the data and handling batching
     train_data = data(base_path_images, train_images, annotations, max_seq_length, processor, train_data_file, START,
@@ -236,6 +237,7 @@ def train():
                                 pad=PAD, start=START, end=END)
         scores.append(score)
         torch.save(model.cpu().state_dict(), last_epoch_file)
+        model = model.to(device)
 
         # test termination
         if score['Bleu_4'] <= best_bleu:
@@ -245,6 +247,7 @@ def train():
         else:
             number_up = 0
             torch.save(model.cpu().state_dict(), best_epoch_file)
+            model = model.to(device)
             best_bleu = scores[-1]['Bleu_4']
             best_epoch = epoch
 

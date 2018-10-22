@@ -4,9 +4,9 @@ from torchvision import models
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, embedding_size):
+    def __init__(self, embedding_size, device):
         super().__init__()
-        self.inception = models.inception_v3(pretrained=True)
+        self.inception = models.inception_v3(pretrained=True).to(device)
         self.inception.aux_logits = False
         # the cnn is pretrained, so turn of the gradient
         for param in self.inception.parameters():
@@ -34,10 +34,11 @@ class Decoder(nn.Module):
         # find the embedding of the correct word to be predicted
         emb = self.target_embeddings(input_words)
         # reshape to the correct order for the LSTM
-        emb = emb.view(1, emb.size(0), self.embedding_size)
+        emb = emb.view(emb.shape[1], emb.shape[0], self.embedding_size)
         # Put through the next LSTM step
         lstm_output, hidden = self.LSTM(emb, hidden_input)
         output = self.logit_lin(lstm_output)
+        output = output.view(output.shape[1], output.shape[0], output.shape[2])
         return output, hidden
 
 
@@ -100,9 +101,9 @@ class CaptionModel(nn.Module):
         super().__init__()
         self.device = device
         self.target_vocab_size = target_vocab_size
-        self.encoder = EncoderCNN(embedding_size).to(device)
+        self.encoder = EncoderCNN(embedding_size, device).to(device)
         self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
-        self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
+        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
 
     def forward(self, images, captions, caption_lengths):
         # Encode
@@ -113,12 +114,14 @@ class CaptionModel(nn.Module):
         hidden_state = (h0, c0)
         # Decode
         batch_size, max_sent_len = captions.shape
-        out = torch.zeros((batch_size)).to(self.device)
-        for w_idx in range(max_sent_len - 1):
-            prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state)
-            out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
+        # out = torch.zeros(batch_size).to(self.device)
+        # for w_idx in range(max_sent_len - 1):
+        #     prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state)
+        #     out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
+        prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
+        out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
         # normalize loss where each sentence is a different length
-        out = torch.mean(torch.div(out, caption_lengths))
+        out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
         return out
 
 # class BinaryCaptionModel(nn.Module):

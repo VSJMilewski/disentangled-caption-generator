@@ -18,7 +18,7 @@ class data():
             self.samples = pickle.load(open(filename, 'rb'))
         else:
             self.samples = self.create_samples(annotations, processor)
-        pickle.dump(self.samples,open(filename,'wb'))
+            pickle.dump(self.samples, open(filename, 'wb'))
 
     def create_samples(self, annotations, processor):
         samples = dict()
