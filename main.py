@@ -273,7 +273,7 @@ def train():
         model = model.to(device)
 
         # test termination
-        if score['Bleu_4'] <= best_bleu:
+        if score[config.eval_metric] <= best_bleu:
             number_up += 1
             if number_up > patience:
                 break
@@ -281,7 +281,7 @@ def train():
             number_up = 0
             torch.save(model.cpu().state_dict(), best_epoch_file)
             model = model.to(device)
-            best_bleu = scores[-1]['Bleu_4']
+            best_bleu = scores[-1][config.eval_metric]
             best_epoch = epoch
 
         # print some info
@@ -340,6 +340,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--max_norm', type=float, default=0.25, help='max norm for gradients')
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
+    parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
 
     config = parser.parse_args()
     device = torch.device(config.device)
