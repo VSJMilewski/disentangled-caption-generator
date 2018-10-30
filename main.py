@@ -34,13 +34,13 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
         predicted_sentences = dict()
         for image, image_name in batch_generator_dev(data_set, batch_size, transform_eval, device):
             # Encode
-            h0 = enc(image)
+            img_emb = enc(image)
 
             # expand the tensors to be of beam-size
-            h0 = h0.unsqueeze(0)
-            h0 = h0.repeat(1, beam_size, 1)
-            c0 = torch.zeros(h0.shape).to(device)
-            hidden_state = (h0, c0)
+            img_emb = img_emb.unsqueeze(0)
+            img_emb = img_emb.repeat(1, beam_size, 1)
+            c0 = torch.zeros(img_emb.shape).to(device)
+            hidden_state = (img_emb, c0)
 
             b_size = image.shape[0]
 
@@ -52,6 +52,7 @@ def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_f
             remaining_sents = b_size  # number of samples in batch
 
             # Decode
+            _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the imgage emb through the LSTM
             for w_idx in range(max_seq_length):
                 input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
                 out, hidden_state = dec(input_, hidden_state)
