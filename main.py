@@ -25,7 +25,7 @@ from beam_search import Beam
 
 
 def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file,
-                    pad='<PAD>', start='<START>', end='<END>', batch_size=1, beam_size=1):
+                    pad='<pad>', start='<start>', end='<end>', batch_size=1, beam_size=1):
     model.eval()
     with torch.no_grad():
         enc = model.encoder.to(device)
@@ -216,7 +216,7 @@ def train():
 
     # data processor for vocab and their index mappings
     processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=vocab_size,
-                              pad=PAD, start=START, end=END, unk=UNK)
+                              pad=PAD, start=START, end=END, unk=UNK, vocab_threshold=config.vocab_threshold)
 
     # data files containing the data and handling batching
     train_data = data(base_path_images, train_images, annotations, max_seq_length, processor, train_data_file, START,
@@ -258,6 +258,7 @@ def train():
             loss = model(image, caption, caption_lengths)
             loss.backward()
             losses.append(float(loss))
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_norm)
             opt.step()
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
@@ -315,10 +316,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Model params
-    parser.add_argument('--sos', type=str, default='<START>', help='Default start of sentence token')
-    parser.add_argument('--eos', type=str, default='<END>', help='Default end of sentence token')
-    parser.add_argument('--pad', type=str, default='<PAD>', help='Default padding token')
-    parser.add_argument('--unk', type=str, default='<UNK>', help='Default unknown token')
+    parser.add_argument('--sos', type=str, default='<start>', help='Default start of sentence token')
+    parser.add_argument('--eos', type=str, default='<end>', help='Default end of sentence token')
+    parser.add_argument('--pad', type=str, default='<pad>', help='Default padding token')
+    parser.add_argument('--unk', type=str, default='<unk>', help='Default unknown token')
     parser.add_argument('--vocab_size', type=int, default=30000, help='Max size of the vocabulary')
     parser.add_argument('--patience', type=int, default=10, help='Patience before terminating')
     parser.add_argument('--max_seq_length', type=int, default=100, help='Length of an input sequence')
@@ -337,6 +338,8 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
+    parser.add_argument('--max_norm', type=float, default=0.25, help='max norm for gradients')
+    parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
 
     config = parser.parse_args()
     device = torch.device(config.device)
