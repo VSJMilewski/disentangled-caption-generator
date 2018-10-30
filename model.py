@@ -19,13 +19,18 @@ class EncoderCNN(nn.Module):
         out = self.inception(x)
         return out
 
+    def init_weights(self):
+        nn.init.xavier_normal(self.inception.fc.weight)
+        nn.init.constant(self.inception.fc.bias, 0.0)
+
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size):
+    def __init__(self, target_vocab_size, embedding_size, p=0.5):
         super().__init__()
 
         self.embedding_size = embedding_size
         self.hidden_size = embedding_size
+        self.dropout = nn.Dropout(p=p)
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
         self.LSTM = nn.LSTM(embedding_size, embedding_size)
         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
@@ -33,6 +38,7 @@ class Decoder(nn.Module):
     def forward(self, input_words, hidden_input):
         # find the embedding of the correct word to be predicted
         emb = self.target_embeddings(input_words)
+        emb = self.dropout(emb)
         # reshape to the correct order for the LSTM
         emb = emb.view(emb.shape[1], emb.shape[0], self.embedding_size)
         # Put through the next LSTM step
@@ -40,6 +46,16 @@ class Decoder(nn.Module):
         output = self.logit_lin(lstm_output)
         output = output.view(output.shape[1], output.shape[0], output.shape[2])
         return output, hidden
+
+    def init_weights(self):
+        for name, param in self.LSTM.named_parameters():
+            if 'bias' in name:
+                nn.init.constant(param, 0.0)
+            elif 'weight' in name:
+                nn.init.xavier_normal(param)
+        nn.init.xavier_normal(self.target_embeddings.weight)
+        nn.init.xavier_normal(self.logit_lin.weight)
+        nn.init.constant(self.logit_lin.bias, 0.0)
 
 
 # class BinaryDecoder(nn.Module):
