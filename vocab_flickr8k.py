@@ -54,7 +54,7 @@ class DataProcessor():
             if sp[0][:-2] in train_data:
                 sent = sp[1].split()
                 for w in sent:
-                    vocab[w] += 1
+                    vocab[w.lower()] += 1
 
         vocab = [k for k,_ in vocab.most_common(self.vocab_size - 4)] #minus 4 because of the default tokens
         vocab_weights = list(range(len(vocab)))

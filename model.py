@@ -53,10 +53,36 @@ class Decoder(nn.Module):
                 nn.init.constant(param, 0.0)
             elif 'weight' in name:
                 nn.init.xavier_normal(param)
-        nn.init.xavier_normal(self.target_embeddings.weight)
+        nn.init.xavier_uniform(self.target_embeddings.weight)
         nn.init.xavier_normal(self.logit_lin.weight)
         nn.init.constant(self.logit_lin.bias, 0.0)
 
+class CaptionModel(nn.Module):
+    def __init__(self,
+                 embedding_size,
+                 target_vocab_size,
+                 device):
+        super().__init__()
+        self.device = device
+        self.target_vocab_size = target_vocab_size
+        self.encoder = EncoderCNN(embedding_size, device).to(device)
+        self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
+        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
+
+    def forward(self, images, captions, caption_lengths):
+        # Encode
+        img_emb = self.encoder(images)
+        # prepare decoder initial hidden state
+        img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
+        c0 = torch.zeros(img_emb.shape).to(self.device)
+        hidden_state = (img_emb, c0)
+        # Decode
+        _, hidden_state = self.decoder(img_emb, hidden_state)
+        prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
+        out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
+        # normalize loss where each sentence is a different length
+        out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
+        return out
 
 # class BinaryDecoder(nn.Module):
 #     def __init__(self, target_vocab_size, embedding_size, switch_size, number_of_topics, topic_emb):
@@ -109,36 +135,6 @@ class Decoder(nn.Module):
 #         return output, hidden
 
 
-class CaptionModel(nn.Module):
-    def __init__(self,
-                 embedding_size,
-                 target_vocab_size,
-                 device):
-        super().__init__()
-        self.device = device
-        self.target_vocab_size = target_vocab_size
-        self.encoder = EncoderCNN(embedding_size, device).to(device)
-        self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
-        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
-
-    def forward(self, images, captions, caption_lengths):
-        # Encode
-        h0 = self.encoder(images)
-        # prepare decoder initial hidden state
-        h0 = h0.unsqueeze(0)  # seq len, batch size, emb size
-        c0 = torch.zeros(h0.shape).to(self.device)
-        hidden_state = (h0, c0)
-        # Decode
-        batch_size, max_sent_len = captions.shape
-        # out = torch.zeros(batch_size).to(self.device)
-        # for w_idx in range(max_sent_len - 1):
-        #     prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state)
-        #     out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
-        prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
-        out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
-        # normalize loss where each sentence is a different length
-        out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
-        return out
 
 # class BinaryCaptionModel(nn.Module):
 #     def __init__(self,
