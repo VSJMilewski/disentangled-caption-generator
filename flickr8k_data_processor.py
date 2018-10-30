@@ -42,7 +42,7 @@ class data():
 
 def batch_generator(data_, batch_size, image_transform, device):
     keys = list(data_.samples.keys())
-    data.rnd.rnd.shuffle(keys)
+    data_.rnd.shuffle(keys)
     current_id = 0
 
     while True:
