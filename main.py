@@ -168,17 +168,20 @@ def train():
     base_pickle_path = config.pickle_path
 
     # temporary files
-    prediction_file = os.path.join(base_output_path, '{}_{}_beam{}.pred'.format(config.model,
-                                                                                config.dataset,
-                                                                                config.beam_size))
+    prediction_file = os.path.join(base_output_path, '{}_{}_beam{}_{}.pred'.format(config.model,
+                                                                                   config.dataset,
+                                                                                   config.beam_size,
+                                                                                   config.unique))
 
     # output files
-    last_epoch_file = os.path.join(base_output_path, 'last_{}_beam{}_{}.pkl'.format(config.dataset,
-                                                                                    config.beam_size,
-                                                                                    config.model))
-    best_epoch_file = os.path.join(base_output_path, 'best_{}_beam{}_{}.pkl'.format(config.dataset,
-                                                                                    config.beam_size,
-                                                                                    config.model))
+    last_epoch_file = os.path.join(base_output_path, 'last_{}_beam{}_{}_{}.pkl'.format(config.dataset,
+                                                                                       config.beam_size,
+                                                                                       config.model,
+                                                                                       config.unique))
+    best_epoch_file = os.path.join(base_output_path, 'best_{}_beam{}_{}_{}.pkl'.format(config.dataset,
+                                                                                       config.beam_size,
+                                                                                       config.model,
+                                                                                       config.unique))
 
     # pickle files
     train_vocab_file = os.path.join(base_pickle_path, 'train_{}_vocab_{}.pkl'.format(config.dataset, vocab_size))
@@ -297,17 +300,23 @@ def train():
     print('=' * 80)
 
     pickle.dump(scores, open(os.path.join(base_output_path,
-                                          'scores_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset, epoch,
-                                                                                                config.beam_size)),
+                                          'scores_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(config.dataset,
+                                                                                                   epoch,
+                                                                                                   config.beam_size,
+                                                                                                   config.unique)),
                              'wb'))
     pickle.dump(losses, open(os.path.join(base_output_path,
-                                          'losses_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset, epoch,
-                                                                                                config.beam_size)),
+                                          'losses_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(config.dataset,
+                                                                                                   epoch,
+                                                                                                   config.beam_size,
+                                                                                                   config.unique)),
                              'wb'))
     pickle.dump(avg_losses, open(os.path.join(base_output_path,
-                                              'avg_losses_{}_baseline_model_epoch_{}_beam{}.pkl'.format(config.dataset,
-                                                                                                        epoch,
-                                                                                                        config.beam_size)),
+                                              'avg_losses_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(
+                                                  config.dataset,
+                                                  epoch,
+                                                  config.beam_size,
+                                                  config.unique)),
                                  'wb'))
 
 
@@ -341,6 +350,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_norm', type=float, default=0.25, help='max norm for gradients')
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
+    parser.add_argument('--unique', type=str, default='', help='string to make files unique')
 
     config = parser.parse_args()
     device = torch.device(config.device)
