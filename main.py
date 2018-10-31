@@ -255,7 +255,7 @@ def train():
             loss = model(image, caption, caption_lengths)
             loss.backward()
             losses.append(float(loss))
-            torch.nn.utils.clip_grad_value_(model.parameters(), max_norm=config.max_grad)
+            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
             opt.step()
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
