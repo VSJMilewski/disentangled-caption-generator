@@ -174,8 +174,10 @@ def train():
     train_vocab_file = os.path.join(config.pickle_path, 'train_{}_vocab_{}_th_{}.pkl'.format(config.dataset,
                                                                                              config.vocab_size,
                                                                                              config.vocab_threshold))
-    train_data_file = os.path.join(config.pickle_path, 'data_{}_train_th_{}.pkl'.format(config.dataset))
-    dev_data_file = os.path.join(config.pickle_path, 'data_{}_dev_th_{}.pkl'.format(config.dataset))
+    train_data_file = os.path.join(config.pickle_path, 'data_{}_train_th_{}.pkl'.format(config.dataset,
+                                                                                        config.vocab_threshold))
+    dev_data_file = os.path.join(config.pickle_path, 'data_{}_dev_th_{}.pkl'.format(config.dataset,
+                                                                                    config.vocab_threshold))
 
     # data files
     train_images_file = None
