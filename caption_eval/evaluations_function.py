@@ -3,7 +3,6 @@
 import hashlib
 import io
 import json
-import pylab
 import sys
 
 sys.path.append('./coco-caption/')
@@ -57,7 +56,6 @@ class CocoResFormat:
 
 def evaluate(prediction_file, reference_file):
   HASH_IMG_NAME = True
-  pylab.rcParams['figure.figsize'] = (10.0, 8.0)
   json.encoder.FLOAT_REPR = lambda o: format(o, '.3f')
   json_predictions_file = '{0}.json'.format(prediction_file)
 
