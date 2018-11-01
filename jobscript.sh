@@ -26,7 +26,7 @@ echo ""
 python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:0 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer Adam --unique th0_adam &
 python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:1 --min_epochs 50 --patience 10 --vocab_threshold 2 --max_time 169200 --optimizer Adam --unique th2_adam &
 python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:2 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer Adagrad --unique th0_adagrad &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:3 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer RMSProp --unique th2_rmsprop &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:3 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer RMSProp --unique th0_rmsprop &
 wait
 
 echo ""
