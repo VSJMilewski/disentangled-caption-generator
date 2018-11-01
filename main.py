@@ -92,6 +92,8 @@ def train():
         opt = RMSprop(params, lr=config.learning_rate)
     elif config.optimizer == 'Adagrad':
         opt = Adagrad(params, lr=config.learning_rate)
+    else:
+        exit('None existing optimizer')
 
     # Start training
     losses = []
