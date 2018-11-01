@@ -23,10 +23,10 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:0 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer Adam --unique th0_adam &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:1 --min_epochs 50 --patience 10 --vocab_threshold 3 --max_time 169200 --optimizer Adam --unique th3_adam &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:2 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer Adagrad --unique th0_adagrad &
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:3 --min_epochs 50 --patience 10 --vocab_threshold 0 --max_time 169200 --optimizer RMSprop --unique th0_rmsprop &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:0 --min_epochs 25 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --unique adam_grad5 &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:1 --min_epochs 25 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 10 --optimizer Adam --unique adam_grad10 &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:2 --min_epochs 25 --patience 10 --vocab_threshold 5 --max_time 169200 --optimizer Adagrad --unique adagrad &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr30k --device cuda:3 --min_epochs 25 --patience 10 --vocab_threshold 5 --max_time 169200 --optimizer RMSprop --unique rmsprop &
 wait
 
 echo ""

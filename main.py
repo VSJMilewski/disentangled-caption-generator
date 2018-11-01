@@ -64,7 +64,7 @@ def train():
         annotations = f.read().splitlines()
 
     # data processor for vocab and their index mappings
-    processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=config.vocab_threshold,
+    processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=config.vocab_size,
                               pad=config.pad, start=config.sos, end=config.eos, unk=config.unk,
                               vocab_threshold=config.vocab_threshold)
 
