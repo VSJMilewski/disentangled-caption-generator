@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
-from flickr8k_data_processor import batch_generator_dev
+from flickr8k_data_processor import batch_generator_dev, batch_generator
 from caption_eval.evaluations_function import evaluate
 from beam_search import Beam
 
@@ -126,7 +126,7 @@ def compute_validation_loss(model, data_set, batch_size, transform, device):
     model.eval()
     losses = []
     with torch.no_grad():
-        for i_batch, batch in enumerate(batch_generator_dev(data_set, batch_size, transform, device)):
+        for i_batch, batch in enumerate(batch_generator(data_set, batch_size, transform, device)):
             image, caption, caption_lengths, _ = batch
             image = image.to(device)
             caption = caption.to(device)
