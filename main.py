@@ -1,205 +1,60 @@
-import matplotlib
-matplotlib.use("agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-import torch.nn.functional as F
-from torch.optim import Adam
-from torch.autograd import Variable
-from torch.utils.data import DataLoader
-import pycocotools #cocoAPI
-from torchvision import transforms
 import pickle
 import os
 import time
 import argparse
+import numpy as np
+import torch
+from torch.optim import Adam, RMSprop, Adagrad
+from torchvision import transforms
+# from torch.utils.data import DataLoader
+# import pycocotools  # cocoAPI
 
 # import other files
 from model import CaptionModel  # , BinaryCaptionModel
-from vocab_flickr8k import *
-from caption_eval.evaluations_function import *
-from flickr8k_data_processor import *
-from beam_search import Beam
-
-
-def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file,
-                    pad='<pad>', start='<start>', end='<end>', batch_size=1, beam_size=1):
-    model.eval()
-    with torch.no_grad():
-        enc = model.encoder.to(device)
-        dec = model.decoder.to(device)
-
-        predicted_sentences = dict()
-        if beam_size == 1:
-            for image, image_name in batch_generator_dev(data_set, 1, transform_eval, device):
-                # Encode
-                img_emb = enc(image)
-
-                # expand the tensors to be of beam-size
-                img_emb = img_emb.unsqueeze(0)
-                c0 = torch.zeros(img_emb.shape).to(device)
-                hidden_state = (img_emb, c0)
-
-                # Decode
-                _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the imgage emb through the LSTM
-                start_token = torch.LongTensor([processor.w2i[start]]).to(device)
-                predicted_words = []
-                prediction = start_token.view(1, 1)
-                for w_idx in range(max_seq_length):
-                    prediction, hidden_state = dec(prediction, hidden_state)
-
-                    index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
-                    predicted_word = processor.i2w[index_predicted_word]
-                    predicted_words.append(predicted_word)
-
-                    if predicted_word == end:
-                        break
-                    prediction = torch.LongTensor([index_predicted_word]).view(1, 1).to(device)
-                predicted_sentences[image_name[0]] = predicted_words
-                del start_token
-                del prediction
-        else:
-            for image, image_name in batch_generator_dev(data_set, batch_size, transform_eval, device):
-                # Encode
-                img_emb = enc(image)
-
-                # expand the tensors to be of beam-size
-                img_emb = img_emb.unsqueeze(0)
-                img_emb = img_emb.repeat(1, beam_size, 1)
-                c0 = torch.zeros(img_emb.shape).to(device)
-                hidden_state = (img_emb, c0)
-
-                b_size = image.shape[0]
-
-                # create the initial beam
-                beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, device=device)
-                        for _ in range(b_size)]
-
-                batch_idx = list(range(b_size))  # indicating index for every sample in the batch
-                remaining_sents = b_size  # number of samples in batch
-
-                # Decode
-                _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the imgage emb through the LSTM
-                for w_idx in range(max_seq_length):
-                    input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
-                    out, hidden_state = dec(input_, hidden_state)
-                    out = F.softmax(out, dim=2)
-
-                    # process lstm step in beam search
-                    word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()
-                    active = []  # list of not finisched samples
-                    for b in range(b_size):
-                        if beam[b].done:
-                            continue
-
-                        idx = batch_idx[b]
-                        if not beam[b].advance(word_lk.data[idx]):  # returns true if complete
-                            active.append(b)
-
-                        for dec_state in hidden_state:  # iterate over h, c
-                            sent_states = dec_state.view(-1, beam_size, remaining_sents, dec_state.size(2))[:, :, idx]
-                            sent_states.data.copy_(sent_states.data.index_select(1, beam[b].get_current_origin()))
-
-                    # test if the beam is finished
-                    if not active:
-                        break
-
-                    # in this section, the sentences that are still active are
-                    # compacted so that the decoder is not run on completed sentences
-                    active_idx = torch.LongTensor([batch_idx[k] for k in active]).to(device)
-                    batch_idx = {beam: idx for idx, beam in enumerate(active)}
-
-                    def update_active(t):
-                        # select only the remaining active sentences
-                        view = t.data.view(-1, remaining_sents, dec.hidden_size)
-                        new_size = list(t.size())
-                        new_size[-2] = new_size[-2] * len(active_idx) // remaining_sents
-                        return Variable(view.index_select(1, active_idx).view(*new_size))
-
-                    hidden_state = (update_active(hidden_state[0]), update_active(hidden_state[1]))
-                    remaining_sents = len(active)
-
-                # select the best hypothesis
-                for b in range(b_size):
-                    score_, k = beam[b].get_best()
-                    hyp = beam[b].get_hyp(k)
-                    predicted_sentences[image_name[b]] = [processor.i2w[idx.item()] for idx in hyp]
-
-        # Compute score of metrics
-        with open(pred_file, 'w', encoding='utf-8') as f:
-            for im, p in predicted_sentences.items():
-                if p[-1] == end:
-                    p = p[:-1]
-                f.write(im + '\t' + ' '.join(p) + '\n')
-        score = evaluate(pred_file, ref_file)
-        model.train()
-    return score
+from vocab_flickr8k import DataProcessor
+from flickr8k_data_processor import batch_generator, data
+from validation import validation_step
 
 
 def print_info(file):
-    with open(file, 'a') as f:
+    if file:
+        with open(file, 'a') as f:
+            print('=' * 80 + '\n{:8s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t{:7s}\n{}'.format(
+                'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80), file=f)
+    else:
         print('=' * 80 + '\n{:8s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t{:7s}\n{}'.format(
-            'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80), file=f)
+            'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80))
 
 
 def print_score(score, time_, epoch, file):
-    with open(file, 'a') as f:
+    if file:
+        with open(file, 'a') as f:
+            print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}s'.format(
+                epoch, score['Bleu_1'] * 100, score['Bleu_2'] * 100, score['Bleu_3'] * 100, score['Bleu_4'] * 100,
+                       score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time_), file=f)
+    else:
         print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}s'.format(
             epoch, score['Bleu_1'] * 100, score['Bleu_2'] * 100, score['Bleu_3'] * 100, score['Bleu_4'] * 100,
-                   score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time_), file=f)
+                   score['METEOR'] * 100, score['ROUGE_L'] * 100, score['CIDEr'] * 100, time_))
+
+
+def print_final(score, time_, epoch, file):
+    print_info(file)
+    if file:
+        with open(file, 'a') as f:
+            print('\n\n\t\t --- Best Epoch: ---', file=f)
+    else:
+        print('\n\n\t\t --- Best Epoch: ---')
+    print_info(file)
+    print_score(score, time_, epoch, file)
+    if file:
+        with open(file, 'a') as f:
+            print('=' * 80, file=f)
+    else:
+        print('=' * 80)
 
 
 def train():
-    # temporary files
-    prediction_file = os.path.join(config.output_path, '{}_{}_beam{}_{}.pred'.format(config.model,
-                                                                                     config.dataset,
-                                                                                     config.beam_size,
-                                                                                     config.unique))
-    progress_file = os.path.join(config.output_path, '{}_{}_beam{}_{}.out'.format(config.model,
-                                                                                  config.dataset,
-                                                                                  config.beam_size,
-                                                                                  config.unique))
-
-    # output files
-    last_epoch_file = os.path.join(config.output_path, 'last_{}_beam{}_{}_{}.pkl'.format(config.dataset,
-                                                                                         config.beam_size,
-                                                                                         config.model,
-                                                                                         config.unique))
-    best_epoch_file = os.path.join(config.output_path, 'best_{}_beam{}_{}_{}.pkl'.format(config.dataset,
-                                                                                         config.beam_size,
-                                                                                         config.model,
-                                                                                         config.unique))
-
-    # pickle files
-    train_vocab_file = os.path.join(config.pickle_path, 'train_{}_vocab_{}_th_{}.pkl'.format(config.dataset,
-                                                                                             config.vocab_size,
-                                                                                             config.vocab_threshold))
-    train_data_file = os.path.join(config.pickle_path, 'data_{}_train_th_{}.pkl'.format(config.dataset,
-                                                                                        config.vocab_threshold))
-    dev_data_file = os.path.join(config.pickle_path, 'data_{}_dev_th_{}.pkl'.format(config.dataset,
-                                                                                    config.vocab_threshold))
-
-    # data files
-    train_images_file = None
-    dev_images_file = None
-    base_path_images = None
-    reference_file = None
-    captions_file = None
-    if config.dataset == 'flickr8k':
-        train_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.trainImages.txt')
-        dev_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.devImages.txt')
-        base_path_images = os.path.join(config.data_path, 'flickr8k/Flicker8k_Dataset/')
-        reference_file = os.path.join(config.data_path, 'flickr8k/Flickr8k_references.dev.json')
-        captions_file = os.path.join(config.data_path, 'flickr8k/Flickr8k.token.txt')
-    elif config.dataset == 'flickr30k':
-        train_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.trainImages.txt')
-        dev_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.devImages.txt')
-        base_path_images = os.path.join(config.data_path, 'flickr30k/flickr30k_images/')
-        reference_file = os.path.join(config.data_path, 'flickr30k/flickr30k_references.dev.json')
-        captions_file = os.path.join(config.data_path, 'flickr30k/results_20130124.token')
-    else:
-        exit('Unknown dataset')
-
     # setup data stuff
     with open(train_images_file) as f:
         train_images = f.read().splitlines()
@@ -230,20 +85,27 @@ def train():
         exit('not an existing model!')
     # params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
     params = filter(lambda p: p.requires_grad, model.parameters())
-    opt = Adam(params, lr=config.learning_rate)
+    opt = None
+    if config.optimizer == 'Adam':
+        opt = Adam(params, lr=config.learning_rate)
+    elif config.optimizer == 'RMSprop':
+        opt = RMSprop(params, lr=config.learning_rate)
+    elif config.optimizer == 'Adagrad':
+        opt = Adagrad(params, lr=config.learning_rate)
 
     # Start training
     losses = []
     avg_losses = dict()
+    val_losses = dict()
     loss_current_ind = 0
     scores = []
     best_bleu = -1
     best_epoch = -1
     number_up = 0
     print('training started!')
-    start0 = time.time()
+    time_start0 = time.time()
     for epoch in range(config.max_epochs):
-        start = time.time()
+        time_start = time.time()
 
         # loop over all the training batches in the epoch
         for i_batch, batch in enumerate(batch_generator(train_data, config.batch_size, transform_train, device)):
@@ -262,17 +124,25 @@ def train():
         loss_current_ind = len(losses)
 
         # validation
-        score = validation_step(model, dev_data, processor, config.max_seq_length, prediction_file, reference_file,
-                                beam_size=config.beam_size, batch_size=config.eval_batch_size,
-                                pad=config.pad, start=config.sos, end=config.eos)
+        score, val_loss = validation_step(model, dev_data, processor, config.max_seq_length, prediction_file,
+                                          reference_file, transform_eval, device,
+                                          beam_size=config.beam_size, batch_size=config.eval_batch_size,
+                                          pad=config.pad, start=config.sos, end=config.eos)
         scores.append(score)
+        avg_losses[len(losses)] = val_loss
         torch.save(model.cpu().state_dict(), last_epoch_file)
         model = model.to(device)
+        pickle.dump(scores, open(score_pickle, 'wb'))
+        pickle.dump(losses, open(loss_pickle, 'wb'))
+        pickle.dump(avg_losses, open(avg_loss_pickle, 'wb'))
+        pickle.dump(val_losses, open(val_loss_pickle, 'wb'))
 
         # test termination
+        time_end = time.time()
         if score[config.eval_metric] <= best_bleu:
             number_up += 1
-            if number_up > config.patience:
+            if (epoch > config.min_epochs and number_up > config.patience) \
+                    or (config.max_time and time_end - time_start0 > config.max_time):
                 break
         else:
             number_up = 0
@@ -282,38 +152,11 @@ def train():
             best_epoch = epoch
 
         # print some info
-        end = time.time()
         if epoch % 50 == 0:
             print_info(progress_file)
-        print_score(scores[-1], end - start, epoch, progress_file)
+        print_score(scores[-1], time_end - time_start, epoch, progress_file)
 
-    print_info(progress_file)
-    with open(progress_file, 'a') as f:
-        print('\n\n\t\t --- Best Epoch: ---', file=f)
-    print_info(progress_file)
-    print_score(scores[best_epoch], time.time() - start0, best_epoch, progress_file)
-    with open(progress_file, 'a') as f:
-        print('=' * 80, file=f)
-
-    pickle.dump(scores, open(os.path.join(config.output_path,
-                                          'scores_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(config.dataset,
-                                                                                                   epoch,
-                                                                                                   config.beam_size,
-                                                                                                   config.unique)),
-                             'wb'))
-    pickle.dump(losses, open(os.path.join(config.output_path,
-                                          'losses_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(config.dataset,
-                                                                                                   epoch,
-                                                                                                   config.beam_size,
-                                                                                                   config.unique)),
-                             'wb'))
-    pickle.dump(avg_losses, open(os.path.join(config.output_path,
-                                              'avg_losses_{}_baseline_model_epoch_{}_beam{}_{}.pkl'.format(
-                                                  config.dataset,
-                                                  epoch,
-                                                  config.beam_size,
-                                                  config.unique)),
-                                 'wb'))
+    print_final(scores[best_epoch], time.time() - time_start0, best_epoch, progress_file)
 
 
 if __name__ == "__main__":
@@ -328,15 +171,15 @@ if __name__ == "__main__":
     parser.add_argument('--vocab_size', type=int, default=30000, help='Max size of the vocabulary')
     parser.add_argument('--patience', type=int, default=10, help='Patience before terminating')
     parser.add_argument('--max_seq_length', type=int, default=100, help='Length of an input sequence')
-    parser.add_argument('--learning_rate', type=float, default=4e-4, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
     parser.add_argument('--batch_size', type=int, default=25, help='Number of samples in batch, 5 sentences per sample')
     parser.add_argument('--eval_batch_size', type=int, default=256, help='Number of samples in eval batch')
     parser.add_argument('--beam_size', type=int, default=20, help='size of the beam during eval, use 1 for greedy')
-    parser.add_argument('--dropout_prob', type=float, default=1.0, help='Dropout keep probability')
+    parser.add_argument('--dropout_prob', type=float, default=0.5, help='Dropout keep probability')
+    parser.add_argument('--min_epochs', type=int, default=0, help='Min number of training steps')
     parser.add_argument('--max_epochs', type=int, default=1000, help='Number of training steps')
-    parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
     parser.add_argument('--output_path', type=str, default='output', help='location where to store the output')
     parser.add_argument('--data_path', type=str, default='data', help='location where to store data')
     parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
@@ -347,6 +190,9 @@ if __name__ == "__main__":
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
     parser.add_argument('--unique', type=str, default='', help='string to make files unique')
+    parser.add_argument('--progress_to_file', type=bool, default=True, help='if results should be printed to file')
+    parser.add_argument('--max_time', type=int, default=None, help='fail save for job walltime')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='which optimizer to use')
 
     config = parser.parse_args()
     device = torch.device(config.device)
@@ -366,6 +212,64 @@ if __name__ == "__main__":
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406),
                              (0.229, 0.224, 0.225))])
+
+    # temporary files
+    prediction_file = os.path.join(config.output_path,
+                                   '{}_{}_beam{}_{}.pred'.format(
+                                       config.model, config.dataset, config.beam_size, config.unique))
+    progress_file = os.path.join(config.output_path,
+                                 '{}_{}_beam{}_{}.out'.format(
+                                     config.model, config.dataset, config.beam_size, config.unique))
+
+    # output files
+    last_epoch_file = os.path.join(config.output_path,
+                                   'last_{}_beam{}_{}_{}.pkl'.format(
+                                       config.dataset, config.beam_size, config.model, config.unique))
+    best_epoch_file = os.path.join(config.output_path,
+                                   'best_{}_beam{}_{}_{}.pkl'.format(
+                                       config.dataset, config.beam_size, config.model, config.unique))
+    score_pickle = os.path.join(config.output_path,
+                                'scores_{}_{}_beam{}_{}.pkl'.format(
+                                    config.model, config.dataset, config.beam_size, config.unique))
+    loss_pickle = os.path.join(config.output_path,
+                               'losses_{}_{}_beam{}_{}.pkl'.format(
+                                   config.model, config.dataset, config.beam_size, config.unique))
+    avg_loss_pickle = os.path.join(config.output_path,
+                                   'avg_losses_{}_{}_beam{}_{}.pkl'.format(
+                                       config.model, config.dataset, config.beam_size, config.unique))
+    val_loss_pickle = os.path.join(config.output_path,
+                                   'val_losses_{}_{}_beam{}_{}.pkl'.format(
+                                       config.model, config.dataset, config.beam_size, config.unique))
+
+    # pickle files
+    train_vocab_file = os.path.join(config.pickle_path,
+                                    'train_{}_vocab_{}_th_{}.pkl'.format(
+                                        config.dataset, config.vocab_size, config.vocab_threshold))
+    train_data_file = os.path.join(config.pickle_path,
+                                   'data_{}_train_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
+    dev_data_file = os.path.join(config.pickle_path,
+                                 'data_{}_dev_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
+
+    # data files
+    train_images_file = None
+    dev_images_file = None
+    base_path_images = None
+    reference_file = None
+    captions_file = None
+    if config.dataset == 'flickr8k':
+        train_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.trainImages.txt')
+        dev_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.devImages.txt')
+        base_path_images = os.path.join(config.data_path, 'flickr8k/Flicker8k_Dataset/')
+        reference_file = os.path.join(config.data_path, 'flickr8k/Flickr8k_references.dev.json')
+        captions_file = os.path.join(config.data_path, 'flickr8k/Flickr8k.token.txt')
+    elif config.dataset == 'flickr30k':
+        train_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.trainImages.txt')
+        dev_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.devImages.txt')
+        base_path_images = os.path.join(config.data_path, 'flickr30k/flickr30k_images/')
+        reference_file = os.path.join(config.data_path, 'flickr30k/flickr30k_references.dev.json')
+        captions_file = os.path.join(config.data_path, 'flickr30k/results_20130124.token')
+    else:
+        exit('Unknown dataset')
 
     # Train the model
     train()

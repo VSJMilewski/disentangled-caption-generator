@@ -45,6 +45,9 @@ __version__ = '1.0.1'
 
 import json
 import datetime
+import matplotlib
+
+matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon

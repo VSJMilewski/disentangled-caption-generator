@@ -57,6 +57,7 @@ class Decoder(nn.Module):
         nn.init.xavier_normal(self.logit_lin.weight)
         nn.init.constant(self.logit_lin.bias, 0.0)
 
+
 class CaptionModel(nn.Module):
     def __init__(self,
                  embedding_size,
@@ -133,7 +134,6 @@ class CaptionModel(nn.Module):
 #         hidden[switch] = hidden_input[switch]
 #
 #         return output, hidden
-
 
 
 # class BinaryCaptionModel(nn.Module):

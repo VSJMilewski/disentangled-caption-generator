@@ -66,7 +66,7 @@ def batch_generator(data_, batch_size, image_transform, device):
             batch_images += [image_transform(image)]*5
             current_id += 1
 
-        batch_cap = np.zeros([len(batch_captions), data_.max_length])
+        batch_cap = np.zeros([len(batch_captions), max(lengths) + 2])
         for j,cap in enumerate(batch_captions):
             batch_cap[j, :len(cap)] = cap
 

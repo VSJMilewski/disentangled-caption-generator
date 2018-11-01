@@ -1,11 +1,8 @@
 # encoding: utf-8
 
-import argparse
-import getopt
 import hashlib
 import io
 import json
-import os
 import pylab
 import sys
 
