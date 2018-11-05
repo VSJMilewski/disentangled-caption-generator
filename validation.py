@@ -7,39 +7,43 @@ from caption_eval.evaluations_function import evaluate
 from beam_search import Beam
 
 
-def greedy_validation(model, data_set, processor, max_seq_length, transform, device, start='<start>', end='<end>'):
+def greedy_validation(model, dataloader, processor, max_seq_length, device):
     model.eval()
     with torch.no_grad():
         enc = model.encoder.to(device)
         dec = model.decoder.to(device)
 
         predicted_sentences = dict()
-        for image, image_name in batch_generator_dev(data_set, 1, transform, device):
+        for image, _, image_names, cap_lengths in dataloader:
             # Encode
             img_emb = enc(image)
 
-            # expand the tensors to be of beam-size
             img_emb = img_emb.unsqueeze(0)
-            c0 = torch.zeros(img_emb.shape).to(device)
+            c0 = torch.zeros(img_emb.shape, device=device)
             hidden_state = (img_emb, c0)
 
             # Decode
-            _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the imgage emb through the LSTM
-            start_token = torch.LongTensor([processor.w2i[start]]).to(device)
-            predicted_words = []
-            prediction = start_token.view(1, 1)
+            _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the image emb through the LSTM
+            start_token = torch.full((img_emb.shape[:2]), processor.w2i[processor.START],
+                                     dtype=torch.long, device=device)
+            predicted_ids = []
+            prediction = start_token.view(1, -1)
             for w_idx in range(max_seq_length):
                 prediction, hidden_state = dec(prediction, hidden_state)
-                index_predicted_word = np.argmax(prediction.detach().cpu().numpy(), axis=2)[0][0]
-                predicted_word = processor.i2w[index_predicted_word]
-                predicted_words.append(predicted_word)
+                ids = torch.argmax(prediction, axis=1)
+                predicted_ids.append(ids)
+                prediction = ids.unsqueeze(0)
 
-                if predicted_word == end:
-                    break
-                prediction = torch.LongTensor([index_predicted_word]).view(1, 1).to(device)
-            predicted_sentences[image_name[0]] = predicted_words
-            del start_token
-            del prediction
+            # now derive the sentences
+            predicted_ids = torch.cat(predicted_ids, 1).cpu().data.numpy()
+            for i, sentence_ids in enumerate(predicted_ids):
+                caption = []
+                for word_id in sentence_ids:
+                    word = processor.i2w[word_id]
+                    if word == processor.END:
+                        break
+                    caption.append(word)
+                predicted_sentences[image_names[i]] = caption
     model.train()
     return predicted_sentences
 
@@ -122,12 +126,12 @@ def beam_search_validation(model, data_set, processor, max_seq_length, transform
     return predicted_sentences
 
 
-def compute_validation_loss(model, data_set, batch_size, transform, device):
+def compute_validation_loss(model, dataloader, device):
     model.eval()
     losses = []
     with torch.no_grad():
-        for i_batch, batch in enumerate(batch_generator(data_set, batch_size, transform, device)):
-            image, caption, caption_lengths, _ = batch
+        for i_batch, batch in enumerate(dataloader):
+            image, caption, _, caption_lengths = batch
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
@@ -137,12 +141,10 @@ def compute_validation_loss(model, data_set, batch_size, transform, device):
     return np.mean(losses)
 
 
-def validation_step(model, data_set, processor, max_seq_length, pred_file, ref_file, transform, device,
-                    pad='<pad>', start='<start>', end='<end>', batch_size=1, beam_size=1):
-    val_loss = compute_validation_loss(model, data_set, beam_size, transform, device)
+def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref_file, device, beam_size=1):
+    val_loss = compute_validation_loss(model, dataloader, beam_size, device)
     if beam_size == 1:
-        predicted_sentences = greedy_validation(model, data_set, processor, max_seq_length, transform, device,
-                                                start=start, end=end)
+        predicted_sentences = greedy_validation(model, dataloader, processor, max_seq_length, device)
     else:
         predicted_sentences = beam_search_validation(model, data_set, processor, max_seq_length, transform, device,
                                                      pad=pad, start=start, end=end,

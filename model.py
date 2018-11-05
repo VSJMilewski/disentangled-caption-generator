@@ -59,10 +59,7 @@ class Decoder(nn.Module):
 
 
 class CaptionModel(nn.Module):
-    def __init__(self,
-                 embedding_size,
-                 target_vocab_size,
-                 device):
+    def __init__(self, embedding_size, target_vocab_size, device):
         super().__init__()
         self.device = device
         self.target_vocab_size = target_vocab_size

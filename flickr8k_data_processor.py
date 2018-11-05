@@ -7,7 +7,7 @@ import os
 from random import Random
 
 
-class data():
+class Data():
     def __init__(self, base_path_images, subset_images, annotations, max_length, processor, filename, start, end,
                  seed=42):
         self.base_path_images = base_path_images

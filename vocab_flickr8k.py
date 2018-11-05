@@ -2,9 +2,9 @@ import os
 import pickle
 from collections import Counter
 from collections import defaultdict
-from flickr8k_data_processor import *
 
-class DataProcessor():
+
+class DataProcessor:
     def __init__(self, annotations, train_data, vocab_size=30000, filename=None,
                  pad='<pad>', start='<start>', end='<end>', unk='<unk>', vocab_threshold=5):
         self.vocab_size = vocab_size
@@ -25,18 +25,18 @@ class DataProcessor():
     def build_dicts(self):
         """
         creates lookup tables to find the index given the word
-        and the otherway around
+        and the other way around
         """
         w2i = defaultdict(lambda: w2i[self.UNK])
         i2w = dict()
-        for i,w in enumerate(self.vocab):
+        for i, w in enumerate(self.vocab):
             i2w[i] = w
             w2i[w] = i
         return w2i, i2w
 
     def build_vocab(self, annotations, train_data, vocab_threshold=5):
         """
-        builds a vocabulary with the most occuring words, in addition to
+        builds a vocabulary with the most occurring words, in addition to
         the UNK token at index 1 and PAD token at index 0.
         START and END tokens are added to the vocabulary through the
         preprocessed sentences.

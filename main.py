@@ -6,13 +6,13 @@ import numpy as np
 import torch
 from torch.optim import Adam, RMSprop, Adagrad
 from torchvision import transforms
-# from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader
 # import pycocotools  # cocoAPI
 
 # import other files
 from model import CaptionModel  # , BinaryCaptionModel
 from vocab_flickr8k import DataProcessor
-from flickr8k_data_processor import batch_generator, data
+from flickr_dataset import FlickrDataset
 from validation import validation_step
 
 
@@ -68,12 +68,20 @@ def train():
                               pad=config.pad, start=config.sos, end=config.eos, unk=config.unk,
                               vocab_threshold=config.vocab_threshold)
 
-    # data files containing the data and handling batching
-    train_data = data(base_path_images, train_images, annotations, config.max_seq_length, processor, train_data_file,
-                      config.sos,
-                      config.eos)
-    dev_data = data(base_path_images, dev_images, annotations, config.max_seq_length, processor, dev_data_file,
-                    config.sos, config.eos)
+    # train_data = Data(base_path_images, train_images, annotations, config.max_seq_length, processor, train_data_file,
+    #                   config.sos, config.eos)
+    # dev_data = Data(base_path_images, dev_images, annotations, config.max_seq_length, processor, dev_data_file,
+    #                 config.sos, config.eos)
+    # data files containing the data
+    train_data = FlickrDataset(base_path_images, annotations, train_images, processor,
+                               train_data_file, transform_train, config.max_seq_length)
+    dev_data = FlickrDataset(base_path_images, annotations, train_images, processor,
+                             dev_data_file, transform_eval, config.max_seq_length)
+    # create the dataloader
+    train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
+                              pin_memory=True, num_workers=config.num_workers)
+    dev_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=False,
+                            pin_memory=True, num_workers=config.num_workers)
 
     # create the models
     model = None
@@ -110,9 +118,10 @@ def train():
         time_start = time.time()
 
         # loop over all the training batches in the epoch
-        for i_batch, batch in enumerate(batch_generator(train_data, config.batch_size, transform_train, device)):
+        # for i_batch, batch in enumerate(batch_generator(train_data, config.batch_size, transform_train, device)):
+        for i_batch, batch in enumerate(train_loader):
             opt.zero_grad()
-            image, caption, caption_lengths, _ = batch
+            image, caption, _, caption_lengths = batch
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
@@ -131,7 +140,7 @@ def train():
                                           beam_size=config.beam_size, batch_size=config.eval_batch_size,
                                           pad=config.pad, start=config.sos, end=config.eos)
         scores.append(score)
-        avg_losses[len(losses)] = val_loss
+        val_losses[len(losses)] = val_loss
         torch.save(model.cpu().state_dict(), last_epoch_file)
         model = model.to(device)
         pickle.dump(scores, open(score_pickle, 'wb'))
@@ -188,6 +197,7 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
+    parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, if there are more GPUs')
     parser.add_argument('--max_grad', type=float, default=5, help='max value for gradients')
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
