@@ -32,7 +32,7 @@ class Decoder(nn.Module):
         self.hidden_size = embedding_size
         self.dropout = nn.Dropout(p=p)
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
-        self.LSTM = nn.LSTM(embedding_size, embedding_size)
+        self.LSTM = nn.LSTM(embedding_size, embedding_size, num_layers=2, dropout=p)
         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
 
     def forward(self, input_words, hidden_input):
