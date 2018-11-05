@@ -15,6 +15,7 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
 
         predicted_sentences = dict()
         for image, _, image_names, cap_lengths in dataloader:
+            torch.cuda.synchronize()
             # Encode
             img_emb = enc(image)
 
@@ -131,6 +132,7 @@ def compute_validation_loss(model, dataloader, device):
     losses = []
     with torch.no_grad():
         for i_batch, batch in enumerate(dataloader):
+            torch.cuda.synchronize()
             image, caption, _, caption_lengths = batch
             image = image.to(device)
             caption = caption.to(device)
@@ -145,10 +147,10 @@ def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref
     val_loss = compute_validation_loss(model, dataloader, beam_size, device)
     if beam_size == 1:
         predicted_sentences = greedy_validation(model, dataloader, processor, max_seq_length, device)
-    else:
-        predicted_sentences = beam_search_validation(model, data_set, processor, max_seq_length, transform, device,
-                                                     pad=pad, start=start, end=end,
-                                                     batch_size=batch_size, beam_size=beam_size)
+    # else:
+    #     predicted_sentences = beam_search_validation(model, data_set, processor, max_seq_length, transform, device,
+    #                                                  pad=pad, start=start, end=end,
+    #                                                  batch_size=batch_size, beam_size=beam_size)
 
     # Compute score of metrics
     with open(pred_file, 'w', encoding='utf-8') as f:

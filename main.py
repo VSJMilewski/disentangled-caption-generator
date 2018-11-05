@@ -120,6 +120,7 @@ def train():
         # loop over all the training batches in the epoch
         # for i_batch, batch in enumerate(batch_generator(train_data, config.batch_size, transform_train, device)):
         for i_batch, batch in enumerate(train_loader):
+            torch.cuda.synchronize()
             opt.zero_grad()
             image, caption, _, caption_lengths = batch
             image = image.to(device)
