@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from PIL import Image
+import torch
 from torch.utils.data.dataset import Dataset
 
 
@@ -31,7 +32,7 @@ class FlickrDataset(Dataset):
         caption = np.zeros((1, self.max_len))
         caption_len = len(self.caption_arr[item])
         caption[0, :caption_len] = self.caption_arr[item]
-
+        caption = torch.from_numpy(caption).type(torch.LongTensor)
         return image, caption, image_name, caption_len
 
     def __len__(self):
