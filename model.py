@@ -25,16 +25,14 @@ class EncoderCNN(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size, lstm_layers=2 p = 0.5
-
-    ):
+    def __init__(self, target_vocab_size, embedding_size, lstm_layers=2, p=0.5):
         super().__init__()
 
         self.embedding_size = embedding_size
         self.hidden_size = embedding_size
         self.dropout = nn.Dropout(p=p)
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
-        self.LSTM = nn.LSTM(embedding_size, embedding_size, num_layers=2, dropout=p)
+        self.LSTM = nn.LSTM(embedding_size, embedding_size, num_layers=lstm_layers, dropout=p)
         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
 
     def forward(self, input_words, hidden_input):
