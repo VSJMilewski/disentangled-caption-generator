@@ -4,6 +4,7 @@ import time
 import argparse
 import numpy as np
 import torch
+from torch import nn
 from torch.optim import Adam, RMSprop, Adagrad
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -93,7 +94,7 @@ def train():
         exit('not an existing model!')
     # params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
     if config.num_workers > 0:
-        model = torch.nn.parallel(model)
+        model = nn.DataParallel(model)
     params = filter(lambda p: p.requires_grad, model.parameters())
     opt = None
     if config.optimizer == 'Adam':
