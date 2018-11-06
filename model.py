@@ -74,7 +74,7 @@ class CaptionModel(nn.Module):
         # prepare decoder initial hidden state
         img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
         h0 = img_emb.repeat(self.lstm_layers, 1, 1)
-        c0 = torch.zeros(img_emb.shape).to(self.device)
+        c0 = torch.zeros(h0.shape).to(self.device)
         hidden_state = (h0, c0)
         # Decode
         _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)
