@@ -92,6 +92,8 @@ def train():
     else:
         exit('not an existing model!')
     # params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
+    if config.num_workers > 0:
+        model = torch.nn.parallel(model)
     params = filter(lambda p: p.requires_grad, model.parameters())
     opt = None
     if config.optimizer == 'Adam':
@@ -136,10 +138,8 @@ def train():
         loss_current_ind = len(losses)
 
         # validation
-        score, val_loss = validation_step(model, dev_data, processor, config.max_seq_length, prediction_file,
-                                          reference_file, transform_eval, device,
-                                          beam_size=config.beam_size, batch_size=config.eval_batch_size,
-                                          pad=config.pad, start=config.sos, end=config.eos)
+        score, val_loss = validation_step(model, dev_loader, processor, config.max_seq_length, prediction_file,
+                                          reference_file, device, beam_size=config.beam_size)
         scores.append(score)
         val_losses[len(losses)] = val_loss
         torch.save(model.cpu().state_dict(), last_epoch_file)
