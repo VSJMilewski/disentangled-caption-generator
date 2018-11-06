@@ -25,7 +25,9 @@ class EncoderCNN(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size, p=0.5):
+    def __init__(self, target_vocab_size, embedding_size, lstm_layers=2 p = 0.5
+
+    ):
         super().__init__()
 
         self.embedding_size = embedding_size
@@ -59,12 +61,13 @@ class Decoder(nn.Module):
 
 
 class CaptionModel(nn.Module):
-    def __init__(self, embedding_size, target_vocab_size, device):
+    def __init__(self, embedding_size, target_vocab_size, lstm_layers, device):
         super().__init__()
         self.device = device
+        self.lstm_layers = lstm_layers
         self.target_vocab_size = target_vocab_size
         self.encoder = EncoderCNN(embedding_size, device).to(device)
-        self.decoder = Decoder(target_vocab_size, embedding_size).to(device)
+        self.decoder = Decoder(target_vocab_size, embedding_size, lstm_layers=lstm_layers).to(device)
         self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
 
     def forward(self, images, captions, caption_lengths):
@@ -72,8 +75,9 @@ class CaptionModel(nn.Module):
         img_emb = self.encoder(images)
         # prepare decoder initial hidden state
         img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
+        h0 = img_emb.repeat(self.lstm_layers, 1, 1)
         c0 = torch.zeros(img_emb.shape).to(self.device)
-        hidden_state = (img_emb, c0)
+        hidden_state = (h0, c0)
         # Decode
         _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)
         prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)

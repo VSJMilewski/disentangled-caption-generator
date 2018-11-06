@@ -87,7 +87,7 @@ def train():
     # create the models
     model = None
     if config.model == 'BASELINE':
-        model = CaptionModel(config.num_hidden, processor.vocab_size, device).to(device)
+        model = CaptionModel(config.num_hidden, processor.vocab_size, config.lstm_layers, device).to(device)
     # elif config.model == 'BINARY':
     #     model = BinaryCaptionModel(config.num_hidden, processor.vocab_size, device).to(device)
     else:
@@ -187,8 +187,9 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
-    parser.add_argument('--batch_size', type=int, default=25, help='Number of samples in batch, 5 sentences per sample')
-    parser.add_argument('--eval_batch_size', type=int, default=256, help='Number of samples in eval batch')
+    parser.add_argument('--batch_size', type=int, default=256,
+                        help='Number of samples in batch, 5 sentences per sample')
+    parser.add_argument('--lstm_layers', type=int, default=2, help='Number of lstm layers')
     parser.add_argument('--beam_size', type=int, default=20, help='size of the beam during eval, use 1 for greedy')
     parser.add_argument('--dropout_prob', type=float, default=0.5, help='Dropout keep probability')
     parser.add_argument('--min_epochs', type=int, default=0, help='Min number of training steps')
