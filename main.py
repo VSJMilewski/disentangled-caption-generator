@@ -81,7 +81,7 @@ def train():
     # create the dataloader
     train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
                               pin_memory=True, num_workers=config.num_workers)
-    dev_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=False,
+    dev_loader = DataLoader(dev_data, batch_size=config.batch_size, shuffle=False,
                             pin_memory=True, num_workers=config.num_workers)
 
     # create the models
