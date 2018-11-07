@@ -69,10 +69,6 @@ def train():
                               pad=config.pad, start=config.sos, end=config.eos, unk=config.unk,
                               vocab_threshold=config.vocab_threshold)
 
-    # train_data = Data(base_path_images, train_images, annotations, config.max_seq_length, processor, train_data_file,
-    #                   config.sos, config.eos)
-    # dev_data = Data(base_path_images, dev_images, annotations, config.max_seq_length, processor, dev_data_file,
-    #                 config.sos, config.eos)
     # data files containing the data
     train_data = FlickrDataset(base_path_images, annotations, train_images, processor,
                                train_data_file, transform_train, config.max_seq_length, unique=False)

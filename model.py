@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import models
 
 
@@ -32,7 +33,7 @@ class Decoder(nn.Module):
         self.dropout = nn.Dropout(p=p)
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
         self.LSTM = nn.LSTM(embedding_size, hidden_size, num_layers=lstm_layers, dropout=p)
-        self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
+        self.logit_lin = nn.Linear(hidden_size, target_vocab_size)  # out
         self.init_weights()
 
     def forward(self, input_words, hidden_input):
@@ -94,117 +95,98 @@ class CaptionModel(nn.Module):
         nn.init.xavier_normal_(self.c0_lin.weight)
         nn.init.constant_(self.h0_lin.bias, 0.0)
         nn.init.constant_(self.c0_lin.bias, 0.0)
-
+#
 # class BinaryDecoder(nn.Module):
-#     def __init__(self, target_vocab_size, embedding_size, switch_size, number_of_topics, topic_emb):
+#
+#     def __init__(self, target_vocab_size, hidden_size, embedding_size, lstm_layers=2, p=0.5):
 #         super().__init__()
 #
-#         self.topic_emb = topic_emb
-#         self.embedding_size = embedding_size
+#         self.dropout = nn.Dropout(p=p)
 #         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
-#         self.LSTM = nn.LSTM(embedding_size, embedding_size)
-#         # output layer
-#         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)
-#
-#         # general topic modelling
-#         self.relu = nn.ReLU()
-#         self.mixing_linear1 = nn.Linear(switch_size, switch_size)
-#         self.mixing_linear2 = nn.Linear(switch_size, switch_size)
-#         self.topic_linear1 = nn.Linear(switch_size, switch_size)
-#         self.topic_linear2 = nn.Linear(switch_size, number_of_topics)
-#         self.desc_linear1 = nn.Linear(number_of_topics * 2, number_of_topics * 2)
-#         self.desc_linear2 = nn.Linear(number_of_topics * 2, target_vocab_size)
-#         self.softmax = nn.Softmax(dim=1)
+#         self.LSTM = nn.LSTM(embedding_size, hidden_size, num_layers=lstm_layers, dropout=p)
+#         self.logit_lin = nn.Linear(embedding_size, target_vocab_size)  # out
+#         self.init_weights()
 #
 #     def forward(self, input_words, hidden_input, topic_input, switch, z0):
 #         # find the embedding of the correct word to be predicted
 #         emb = self.target_embeddings(input_words)
+#         emb = self.dropout(emb)
 #         # reshape to the correct order for the LSTM
-#         emb = emb.view(1, emb.size(0), self.embedding_size)
+#         emb = torch.transpose(emb, 0, 1)
 #
 #         # Put through the next LSTM step
+#         self.LSTM.flatten_parameters()
 #         lstm_output, hidden = self.LSTM(emb, hidden_input)
 #         output = self.logit_lin(lstm_output)
-#
-#         # Put through the description model
-#         # Mixing coefficient
-#         r31 = self.relu(self.mixing_linear1(topic_input))
-#         r32 = self.relu(self.mixing_linear2(r31))
-#         # topic modelling
-#         r41 = self.relu(self.topic_linear1(r32))
-#         r42 = self.relu(self.topic_linear2(r41))
-#         zi = torch.matmul(r42, self.topic_emb)
-#         desc_input = torch.cat((z0, zi), 1)
-#         r51 = self.relu(self.topic_linear1(desc_input))
-#         r52 = self.relu(self.topic_linear1(r51))
-#         desc_output = self.softmax(r52)
-#
-#         # binary selection
-#         output[switch] = desc_output[switch]
-#         hidden[switch] = hidden_input[switch]
-#
+#         output = output.transpose(0, 1)
 #         return output, hidden
-
-
+#
+#     def init_weights(self):
+#         for name, param in self.LSTM.named_parameters():
+#             if 'bias' in name:
+#                 nn.init.constant_(param, 0.0)
+#             elif 'weight' in name:
+#                 nn.init.xavier_normal_(param)
+#         nn.init.xavier_uniform_(self.target_embeddings.weight)
+#         nn.init.xavier_normal_(self.logit_lin.weight)
+#         nn.init.constant_(self.logit_lin.bias, 0.0)
+#
+#
 # class BinaryCaptionModel(nn.Module):
-#     def __init__(self,
-#                  embedding_size,
-#                  target_vocab_size,
-#                  number_of_topics,
-#                  device):
+#     def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, device, number_of_topics=100):
 #         super().__init__()
 #         self.device = device
-#         self.target_vocab_size = target_vocab_size
-#         self.number_of_topics = number_of_topics
-#         switch_size = embedding_size * 2 + number_of_topics
-#         self.topic_emb = nn.Embedding(number_of_topics, embedding_size)
-#         self.relu = nn.ReLU()
-#
-#         self.encoder = EncoderCNN(embedding_size).to(device)
-#         self.decoder = Decoder(target_vocab_size, embedding_size, switch_size, number_of_topics, self.topic_emb).to(
-#             device)
-#         self.loss = nn.CrossEntropyLoss(ignore_index=0).to(device)
-#
+#         self.lstm_layers = lstm_layers
+#         self.encoder = EncoderCNN(embedding_size, device).to(device)
+#         self.decoder = BinaryDecoder(target_vocab_size, hidden_size, embedding_size, lstm_layers=lstm_layers).to(device)
+#         self.h0_lin = nn.Linear(embedding_size, hidden_size)
+#         self.c0_lin = nn.Linear(embedding_size, hidden_size)
+#         self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
 #
 #         # general topic modelling
-#         self.topic_linear1 = nn.Linear(embedding_size, embedding_size)
-#         self.topic_linear2 = nn.Linear(embedding_size, number_of_topics)
+#         self.sent_topic_lin1 = nn.Linear(embedding_size, hidden_size)
+#         self.sent_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
+#         self.mixing_linear1 = nn.Linear(switch_size, switch_size)
+#         self.mixing_linear2 = nn.Linear(switch_size, switch_size)
+#         self.desc_linear1 = nn.Linear(number_of_topics * 2, number_of_topics * 2)
+#         self.desc_linear2 = nn.Linear(number_of_topics * 2, target_vocab_size)
 #
-#         # binary switch
-#         self.switch_linear1 = nn.Linear(switch_size, switch_size)
-#         self.switch_linear2 = nn.Linear(switch_size, 2)
+#         self.init_weights()
 #
 #     def forward(self, images, captions, caption_lengths):
 #         # Encode
-#         h0 = self.encoder(images)
+#         img_emb = self.encoder(images)
+#
 #         # prepare decoder initial hidden state
-#         h0 = h0.unsqueeze(0)
-#         c0 = torch.zeros(h0.shape).to(self.device)
+#         img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
+#         h0 = self.h0_lin(img_emb)
+#         h0 = h0.repeat(self.lstm_layers, 1, 1)
+#         c0 = self.c0_lin(img_emb)
+#         c0 = c0.repeat(self.lstm_layers, 1, 1)
 #         hidden_state = (h0, c0)
 #
-#         # general topics
-#         r11 = self.relu(self.topic_linear1(h0))
-#         r12 = self.relu(self.topic_linear2(r11))
+#         # predict sentence-level topic distribution
+#         pi0 = F.relu(self.sent_topic_lin1(img_emb))
+#         pi0 = F.relu(self.sent_topic_lin2(pi0))
+#         pi0 = F.softmax(pi0)
 #
-#         embs = self.topic_emb(torch.arange(self.number_of_topics).to(device))
-#         z0 = torch.matmul(r12, embs)
+#         # compute global topic embedding
+#         z0 = F.mm
 #
 #         # Decode
-#         batch_size, max_sent_len = captions.shape
-#         out = torch.zeros((batch_size)).to(self.device)
-#         for w_idx in range(max_sent_len - 1):
-#             # binary switch
-#             switch_input = torch.cat((h0, z0, hidden_state[0]), 1)
-#             r21 = self.relu(self.switch_linear1(switch_input))
-#             r22 = self.relu(self.switch_linear2(r21))
-#             switch = torch.argmax(r22, 1)
-#
-#             prediction, hidden_state = self.decoder(captions[:, w_idx].view(-1, 1), hidden_state, switch, z0)
-#
-#
-#             out += self.loss(prediction.squeeze(0), captions[:, w_idx + 1])
+#         # _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
+#         prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
+#         out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
 #         # normalize loss where each sentence is a different length
-#         out = torch.mean(torch.div(out,
-#                                    caption_lengths))
-#
+#         out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
 #         return out
+#
+#     def init_weights(self):
+#         nn.init.xavier_normal_(self.h0_lin.weight)
+#         nn.init.xavier_normal_(self.c0_lin.weight)
+#         nn.init.xavier_normal_(self.sent_topic_lin1.weight)
+#         nn.init.xavier_normal_(self.sent_topic_lin2.weight)
+#         nn.init.constant_(self.h0_lin.bias, 0.0)
+#         nn.init.constant_(self.c0_lin.bias, 0.0)
+#         nn.init.constant_(self.sent_topic_lin1.bias, 0.0)
+#         nn.init.constant_(self.sent_topic_lin2.bias, 0.0)
