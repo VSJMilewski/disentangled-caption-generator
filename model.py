@@ -26,7 +26,7 @@ class EncoderCNN(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, target_vocab_size, embedding_size, hidden_size, lstm_layers=2, p=0.5):
+    def __init__(self, target_vocab_size, hidden_size, embedding_size, lstm_layers=2, p=0.5):
         super().__init__()
 
         self.embedding_size = embedding_size
@@ -44,9 +44,10 @@ class Decoder(nn.Module):
         # reshape to the correct order for the LSTM
         emb = torch.transpose(emb, 0, 1)
         # Put through the next LSTM step
+        self.LSTM.flatten_parameters()
         lstm_output, hidden = self.LSTM(emb, hidden_input)
         output = self.logit_lin(lstm_output)
-        output = output.view(output.shape[1], output.shape[0], output.shape[2])
+        output = output.transpose(0, 1)
         return output, hidden
 
     def init_weights(self):
@@ -61,13 +62,12 @@ class Decoder(nn.Module):
 
 
 class CaptionModel(nn.Module):
-    def __init__(self, embedding_size, target_vocab_size, lstm_layers, device):
+    def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, device):
         super().__init__()
         self.device = device
-        hidden_size = embedding_size
         self.lstm_layers = lstm_layers
         self.encoder = EncoderCNN(embedding_size, device).to(device)
-        self.decoder = Decoder(target_vocab_size, embedding_size, hidden_size, lstm_layers=lstm_layers).to(device)
+        self.decoder = Decoder(target_vocab_size, hidden_size, embedding_size, lstm_layers=lstm_layers).to(device)
         self.h0_lin = nn.Linear(embedding_size, hidden_size)
         self.c0_lin = nn.Linear(embedding_size, hidden_size)
         self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
@@ -84,7 +84,7 @@ class CaptionModel(nn.Module):
         c0 = c0.repeat(self.lstm_layers, 1, 1)
         hidden_state = (h0, c0)
         # Decode
-        _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
+        # _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
         prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
         out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
         # normalize loss where each sentence is a different length

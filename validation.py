@@ -63,7 +63,7 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
             hidden_state = (h0, c0)
 
             # Decode
-            _, hidden_state = dec.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
+            # _, hidden_state = dec.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
             input_ = torch.full((img_emb.shape[1], 1), processor.w2i[processor.START],
                                      dtype=torch.long, device=device)
             predicted_ids = []
