@@ -87,13 +87,12 @@ def train():
     # create the models
     model = None
     if config.model == 'BASELINE':
-        model = CaptionModel(config.num_hidden, config.emb_size, processor.vocab_size, config.lstm_layers, device).to(
+        model = CaptionModel(config.hidden_size, config.emb_size, processor.vocab_size, config.lstm_layers, device).to(
             device)
     # elif config.model == 'BINARY':
-    #     model = BinaryCaptionModel(config.num_hidden, processor.vocab_size, device).to(device)
+    #     model = BinaryCaptionModel(config.hidden_size, processor.vocab_size, device).to(device)
     else:
         exit('not an existing model!')
-    # params = list(model.encoder.inception.fc.parameters()) + list(model.decoder.parameters())
     if config.num_workers > 0:
         model = nn.DataParallel(model)
     params = filter(lambda p: p.requires_grad, model.parameters())
@@ -186,7 +185,7 @@ if __name__ == "__main__":
     parser.add_argument('--patience', type=int, default=10, help='Patience before terminating')
     parser.add_argument('--max_seq_length', type=int, default=100, help='Length of an input sequence')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
-    parser.add_argument('--num_hidden', type=int, default=512, help='Number of hidden units in the LSTM')
+    parser.add_argument('--hidden_size', type=int, default=512, help='Number of hidden units in the LSTM')
     parser.add_argument('--emb_size', type=int, default=128, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
     parser.add_argument('--batch_size', type=int, default=256, help='Number of samples in batch')

@@ -29,8 +29,6 @@ class Decoder(nn.Module):
     def __init__(self, target_vocab_size, hidden_size, embedding_size, lstm_layers=2, p=0.5):
         super().__init__()
 
-        self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
         self.dropout = nn.Dropout(p=p)
         self.target_embeddings = nn.Embedding(target_vocab_size, embedding_size)
         self.LSTM = nn.LSTM(embedding_size, hidden_size, num_layers=lstm_layers, dropout=p)
