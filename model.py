@@ -85,7 +85,7 @@ class CaptionModel(nn.Module):
         # Decode
         # _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
         prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
-        out = self.loss(prediction.view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
+        out = self.loss(prediction.contiguous().view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
         # normalize loss where each sentence is a different length
         out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
         return out
