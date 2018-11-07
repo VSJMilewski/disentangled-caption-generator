@@ -76,7 +76,7 @@ def train():
     # data files containing the data
     train_data = FlickrDataset(base_path_images, annotations, train_images, processor,
                                train_data_file, transform_train, config.max_seq_length, unique=False)
-    dev_data = FlickrDataset(base_path_images, annotations, train_images, processor,
+    dev_data = FlickrDataset(base_path_images, annotations, dev_images, processor,
                              dev_data_file, transform_eval, config.max_seq_length, unique=True)
     # create the dataloader
     train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
