@@ -126,7 +126,7 @@ def train():
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
             loss = model(image, caption, caption_lengths)
-            loss.backward()
+            loss = loss.sum().backward()
             losses.append(float(loss))
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
             opt.step()

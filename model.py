@@ -144,13 +144,15 @@ class CaptionModel(nn.Module):
 #         self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
 #
 #         # general topic modelling
+#         self.topic_embeddings = nn.Embedding(number_of_topics, embedding_size)
 #         self.sent_topic_lin1 = nn.Linear(embedding_size, hidden_size)
 #         self.sent_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
-#         self.mixing_linear1 = nn.Linear(switch_size, switch_size)
-#         self.mixing_linear2 = nn.Linear(switch_size, switch_size)
-#         self.desc_linear1 = nn.Linear(number_of_topics * 2, number_of_topics * 2)
-#         self.desc_linear2 = nn.Linear(number_of_topics * 2, target_vocab_size)
-#
+#         self.switch_lin1 = nn.Linear(embedding_size*2+hidden_size, hidden_size)
+#         self.switch_lin2 = nn.Linear(hidden_size, hidden_size)
+#         self.pos_topic_lin1 = nn.Linear(embedding_size*2+hidden_size, hidden_size)
+#         self.pos_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
+#         self.output_lin1 = nn.Linear(embedding_size*2, hidden_size)
+#         self.output_lin2 = nn.Linear(hidden_size, target_vocab_size)
 #         self.init_weights()
 #
 #     def forward(self, images, captions, caption_lengths):
@@ -165,13 +167,36 @@ class CaptionModel(nn.Module):
 #         c0 = c0.repeat(self.lstm_layers, 1, 1)
 #         hidden_state = (h0, c0)
 #
-#         # predict sentence-level topic distribution
+#         # compute sentence mixing coefficient
 #         pi0 = F.relu(self.sent_topic_lin1(img_emb))
 #         pi0 = F.relu(self.sent_topic_lin2(pi0))
 #         pi0 = F.softmax(pi0)
 #
 #         # compute global topic embedding
-#         z0 = F.mm
+#         z0 = F.matmul(pi0, self.topic_embeddings.weight)
+#
+#         # loop over the sequence length
+#         for i in range(captions.shape[1]-1):
+#             topic_features = torch.cat(img_emb, z0, hidden_state[0])
+#
+#             #compute the switch
+#             Bi = F.relu(self.switch_lin1(topic_features))
+#             Bi = F.relu(self.switch_lin1(Bi))
+#             Bi = F.sigmoid(Bi)
+#
+#             #compute the language model output
+#             prediction_language_model, hidden_state_language_model = self.decoder(captions[:, i], hidden_state)
+#
+#             # compute the description model output
+#             pii = F.relu(self.pos_topic_lin1(topic_features))
+#             pii = F.relu(self.pos_topic_lin2(pii))
+#             pii = F.softmax(pii)
+#             zi = F.matmul(pii, self.topic_embeddings.weight)
+#             output_features = torch.cat(z0, zi)
+#             out = F.relu(self.output_lin1(output_features))
+#             out = F.relu(self.output_lin2(out))
+#             prediction_description_model = F.softmax(out)
+#
 #
 #         # Decode
 #         # _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
