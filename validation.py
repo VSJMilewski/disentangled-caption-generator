@@ -9,8 +9,8 @@ from caption_eval.evaluations_function import evaluate
 # from beam_search import Beam
 
 
-def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref_file, device, beam_size=1):
-    val_loss = compute_validation_loss(model, dataloader, device)
+def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref_file, criterion, device, beam_size=1):
+    val_loss = compute_validation_loss(model, dataloader, criterion, device)
     if beam_size == 1:
         predicted_sentences = greedy_validation(model, dataloader, processor, max_seq_length, device)
     else:
@@ -28,7 +28,7 @@ def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref
     return score, val_loss
 
 
-def compute_validation_loss(model, dataloader, device):
+def compute_validation_loss(model, dataloader, criterion, device):
     model.eval()
     losses = []
     with torch.no_grad():
@@ -38,7 +38,12 @@ def compute_validation_loss(model, dataloader, device):
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
-            loss = model(image, caption, caption_lengths)
+            prediction, _ = model(image, caption)
+            loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
+                             caption[:, 1:].contiguous().view(-1))
+            # normalize loss where each sentence is a different length
+            loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
+                                        caption_lengths)).sum()
             losses.append(float(loss))
     model.train()
     return np.mean(losses)

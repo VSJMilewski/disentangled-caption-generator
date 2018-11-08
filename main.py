@@ -101,6 +101,7 @@ def train():
         opt = Adagrad(params, lr=config.learning_rate)
     else:
         exit('None existing optimizer')
+    criterion = nn.CrossEntropyLoss(ignore_index=processor.w2i[config.pad], reduction='none').to(device)
 
     # Start training
     losses = []
@@ -125,8 +126,13 @@ def train():
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
-            loss = model(image, caption, caption_lengths)
-            loss = loss.sum().backward()
+            prediction, _ = model(image, caption)
+            loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
+                             caption[:, 1:].contiguous().view(-1))
+            # normalize loss where each sentence is a different length
+            loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
+                                        caption_lengths)).sum()
+            loss.backward()
             losses.append(float(loss))
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
             opt.step()
@@ -136,7 +142,7 @@ def train():
 
         # validation
         score, val_loss = validation_step(model, dev_loader, processor, config.max_seq_length, prediction_file,
-                                          reference_file, device, beam_size=config.beam_size)
+                                          reference_file, criterion, device, beam_size=config.beam_size)
         scores.append(score)
         val_losses[len(losses)] = val_loss
         torch.save(model.cpu().state_dict(), last_epoch_file)

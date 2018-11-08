@@ -69,10 +69,9 @@ class CaptionModel(nn.Module):
         self.decoder = Decoder(target_vocab_size, hidden_size, embedding_size, lstm_layers=lstm_layers).to(device)
         self.h0_lin = nn.Linear(embedding_size, hidden_size)
         self.c0_lin = nn.Linear(embedding_size, hidden_size)
-        self.loss = nn.CrossEntropyLoss(ignore_index=0, reduction='none').to(device)
         self.init_weights()
 
-    def forward(self, images, captions, caption_lengths):
+    def forward(self, images, captions):
         # Encode
         img_emb = self.encoder(images)
         # prepare decoder initial hidden state
@@ -85,10 +84,7 @@ class CaptionModel(nn.Module):
         # Decode
         # _, hidden_state = self.decoder.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
         prediction, hidden_state = self.decoder(captions[:, :-1], hidden_state)
-        out = self.loss(prediction.contiguous().view(-1, prediction.shape[2]), captions[:, 1:].contiguous().view(-1))
-        # normalize loss where each sentence is a different length
-        out = torch.mean(torch.div(out.view(prediction.shape[0], prediction.shape[1]).sum(dim=1), caption_lengths))
-        return out
+        return prediction, hidden_state
 
     def init_weights(self):
         nn.init.xavier_normal_(self.h0_lin.weight)
