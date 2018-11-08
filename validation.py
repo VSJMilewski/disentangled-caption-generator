@@ -52,8 +52,8 @@ def compute_validation_loss(model, dataloader, criterion, device):
 def greedy_validation(model, dataloader, processor, max_seq_length, device):
     model.eval()
     with torch.no_grad():
-        enc = model.encoder.to(device)
-        dec = model.decoder.to(device)
+        enc = model.module.encoder.to(device)
+        dec = model.module.decoder.to(device)
 
         predicted_sentences = dict()
         for image, _, image_names, cap_lengths in dataloader:
@@ -61,10 +61,10 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
             # Encode
             img_emb = enc(image)
             img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-            h0 = model.h0_lin(img_emb)
-            h0 = h0.repeat(model.lstm_layers, 1, 1)
-            c0 = model.c0_lin(img_emb)
-            c0 = c0.repeat(model.lstm_layers, 1, 1)
+            h0 = model.module.h0_lin(img_emb)
+            h0 = h0.repeat(model.module.lstm_layers, 1, 1)
+            c0 = model.module.c0_lin(img_emb)
+            c0 = c0.repeat(model.module.lstm_layers, 1, 1)
             hidden_state = (h0, c0)
 
             # Decode
