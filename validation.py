@@ -56,8 +56,9 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
         dec = model.module.decoder.to(device)
 
         predicted_sentences = dict()
-        for image, _, image_names, cap_lengths in dataloader:
+        for image, _, image_names, _ in dataloader:
             torch.cuda.synchronize()
+            image = image.to(device)
             # Encode
             img_emb = enc(image)
             img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
