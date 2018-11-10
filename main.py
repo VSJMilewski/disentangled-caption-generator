@@ -76,9 +76,9 @@ def train():
                              dev_data_file, transform_eval, config.max_seq_length, unique=True)
     # create the dataloader
     train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
-                              pin_memory=True, num_workers=config.num_workers)
+                              pin_memory=True, num_workers=config.num_workers, drop_last=True)
     dev_loader = DataLoader(dev_data, batch_size=config.batch_size, shuffle=False,
-                            pin_memory=True, num_workers=config.num_workers)
+                            pin_memory=True, num_workers=config.num_workers, drop_last=True)
 
     # create the models
     model = None
