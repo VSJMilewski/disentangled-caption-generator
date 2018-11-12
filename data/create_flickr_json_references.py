@@ -10,9 +10,9 @@ import sys
 class CocoAnnotations:
     def __init__(self, dataset):
         self.dataset = dataset
-        self.images = [];
-        self.annotations = [];
-        self.img_dict = {};
+        self.images = []
+        self.annotations = []
+        self.img_dict = {}
         if dataset == "flickr30k":
             info = {
                 "year": 2016,

@@ -1,22 +1,30 @@
 import numpy as np
 import torch
-# import torch.nn.functional as F
-# from torch.autograd import Variable
-# from flickr8k_data_processor import batch_generator_dev, batch_generator
+
 from caption_eval.evaluations_function import evaluate
 
 
-# from beam_search import Beam
-
-
 def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref_file, criterion, device, beam_size=1):
+    """
+    Computes the loss (without backward propogation) for the given dataset and it computes the validation metrics
+    :param model: The model on which to test
+    :param dataloader: The dataloader used for geting batches
+    :param processor: The dataprocessor with the vocabulary and index mappings
+    :param max_seq_length: The maximum allowed length of to be predicted sequences
+    :param pred_file: The file where the created predictions are written to
+    :param ref_file: The json file with for each image references to their gold standard captions
+    :param criterion: The defined criterion for computing the loss
+    :param device: On which device to run the model
+    :param beam_size: The beam size to use for making predictions. Beam_size == 1 will perform greedy search
+    :return: The socres for the different metrics
+             and the average loss over the entire dataset
+    """
     val_loss = compute_validation_loss(model, dataloader, criterion, device)
     if beam_size == 1:
         predicted_sentences = greedy_validation(model, dataloader, processor, max_seq_length, device)
     else:
-        exit('beamsearch not implemented')
-        # predicted_sentences = beam_search_validation(model, dataloader, processor,
-        #                                              max_seq_length, device, beam_size=beam_size)
+        predicted_sentences = beam_search_validation(model, dataloader, processor,
+                                                     max_seq_length, device, beam_size=beam_size)
 
     # Compute score of metrics
     with open(pred_file, 'w', encoding='utf-8') as f:
@@ -29,6 +37,14 @@ def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref
 
 
 def compute_validation_loss(model, dataloader, criterion, device):
+    """
+    Computes the validation loss for the given dataset, no backprogation
+    :param model: The model on which to test
+    :param dataloader: The dataloader used for geting batches
+    :param criterion: The defined criterion for computing the loss
+    :param device: On which device to run the model
+    :return: The average loss over the entire dataset
+    """
     model.eval()
     losses = []
     with torch.no_grad():
@@ -38,7 +54,7 @@ def compute_validation_loss(model, dataloader, criterion, device):
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
-            prediction, _ = model(image, caption)
+            prediction = model(image, caption)
             loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
                              caption[:, 1:].contiguous().view(-1))
             # normalize loss where each sentence is a different length
@@ -50,36 +66,29 @@ def compute_validation_loss(model, dataloader, criterion, device):
 
 
 def greedy_validation(model, dataloader, processor, max_seq_length, device):
+    """
+    Creates predictings given the current state of the model using the greedy method, at each time step the
+    word with the highest score is selected.
+    :param model: The model on which to test
+    :param dataloader: The dataloader used for geting batches
+    :param processor: The dataprocessor with the vocabulary and index mappings
+    :param max_seq_length: The maximum allowed length of to be predicted sequences
+    :param device: On which device to run the model
+    :return: The socres for the different metrics
+    """
     model.eval()
     with torch.no_grad():
-        enc = model.module.encoder.to(device)
-        dec = model.module.decoder.to(device)
-
         predicted_sentences = dict()
         for image, _, image_names, _ in dataloader:
             torch.cuda.synchronize()
             image = image.to(device)
-            # Encode
-            img_emb = enc(image)
-            img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-            h0 = model.module.h0_lin(img_emb)
-            h0 = h0.repeat(model.module.lstm_layers, 1, 1)
-            c0 = model.module.c0_lin(img_emb)
-            c0 = c0.repeat(model.module.lstm_layers, 1, 1)
-            hidden_state = (h0, c0)
-
-            # Decode
-            # _, hidden_state = dec.LSTM(img_emb, hidden_state)  # start lstm with img emb at t=-1
-            input_ = torch.full((img_emb.shape[1], 1), processor.w2i[processor.START],
-                                     dtype=torch.long, device=device)
-            predicted_ids = []
-            for w_idx in range(max_seq_length):
-                prediction, hidden_state = dec(input_, hidden_state)
-                input_ = torch.argmax(prediction, dim=2)
-                predicted_ids.append(input_)
-
+            input_ = torch.full((image.shape[0], 1), processor.w2i[processor.START], dtype=torch.long, device=device)
+            if torch.cuda.device_count() > 1:
+                predicted_ids = model.module.greedy_sample(image, input_)
+            else:
+                predicted_ids = model.greedy_sample(image, input_, max_seq_length)
             # now derive the sentences
-            predicted_ids = torch.cat(predicted_ids, 1).cpu().data.numpy()
+            predicted_ids = predicted_ids.cpu().data.numpy()
             for i, sentence_ids in enumerate(predicted_ids):
                 caption = []
                 for word_id in sentence_ids:
@@ -91,78 +100,29 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
     model.train()
     return predicted_sentences
 
-# def beam_search_validation(model, dataloader, processor, max_seq_length, device, beam_size=1):
-#     model.eval()
-#     with torch.no_grad():
-#         enc = model.encoder.to(device)
-#         dec = model.decoder.to(device)
-#
-#         predicted_sentences = dict()
-#         for image, image_name in dataloader:
-#             # Encode
-#             img_emb = enc(image)
-#
-#             # expand the tensors to be of beam-size
-#             img_emb = img_emb.unsqueeze(0)
-#             img_emb = img_emb.repeat(1, beam_size, 1)
-#             c0 = torch.zeros(img_emb.shape).to(device)
-#             hidden_state = (img_emb, c0)
-#
-#             b_size = image.shape[0]
-#
-#             # create the initial beam
-#             beam = [Beam(beam_size, processor.w2i, pad=pad, start=start, end=end, device=device)
-#                     for _ in range(b_size)]
-#
-#             batch_idx = list(range(b_size))  # indicating index for every sample in the batch
-#             remaining_sents = b_size  # number of samples in batch
-#
-#             # Decode
-#             _, hidden_state = dec.LSTM(img_emb, hidden_state)  # for t-1 put the imgage emb through the LSTM
-#             for w_idx in range(max_seq_length):
-#                 input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
-#                 out, hidden_state = dec(input_, hidden_state)
-#                 out = F.softmax(out, dim=2)
-#
-#                 # process lstm step in beam search
-#                 word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()
-#                 active = []  # list of not finisched samples
-#                 for b in range(b_size):
-#                     if beam[b].done:
-#                         continue
-#
-#                     idx = batch_idx[b]
-#                     if not beam[b].advance(word_lk.data[idx]):  # returns true if complete
-#                         active.append(b)
-#
-#                     for dec_state in hidden_state:  # iterate over h, c
-#                         sent_states = dec_state.view(-1, beam_size, remaining_sents, dec_state.size(2))[:, :, idx]
-#                         sent_states.data.copy_(sent_states.data.index_select(1, beam[b].get_current_origin()))
-#
-#                 # test if the beam is finished
-#                 if not active:
-#                     break
-#
-#                 # in this section, the sentences that are still active are
-#                 # compacted so that the decoder is not run on completed sentences
-#                 active_idx = torch.LongTensor([batch_idx[k] for k in active]).to(device)
-#                 batch_idx = {beam: idx for idx, beam in enumerate(active)}
-#
-#                 def update_active(t):
-#                     # select only the remaining active sentences
-#                     view = t.data.view(-1, remaining_sents, dec.hidden_size)
-#                     new_size = list(t.size())
-#                     new_size[-2] = new_size[-2] * len(active_idx) // remaining_sents
-#                     return Variable(view.index_select(1, active_idx).view(*new_size))
-#
-#                 hidden_state = (update_active(hidden_state[0]), update_active(hidden_state[1]))
-#                 remaining_sents = len(active)
-#
-#             # select the best hypothesis
-#             for b in range(b_size):
-#                 score_, k = beam[b].get_best()
-#                 hyp = beam[b].get_hyp(k)
-#                 predicted_sentences[image_name[b]] = [processor.i2w[idx.item()] for idx in hyp]
-#
-#     model.train()
-#     return predicted_sentences
+
+def beam_search_validation(model, dataloader, processor, max_seq_length, device, beam_size=1):
+    """
+    Creates predictings given the current state of the model using the beam search method, at each time step the
+    'beam_size' highest expansions on the current sequences are chosen. With these the beam is again expanded.
+    :param model: The model on which to test
+    :param dataloader: The dataloader used for geting batches
+    :param processor: The dataprocessor with the vocabulary and index mappings
+    :param max_seq_length: The maximum allowed length of to be predicted sequences
+    :param device: On which device to run the model
+    :param beam_size: The beam size to use for making predictions
+    :return: The socres for the different metrics
+    """
+    model.eval()
+    predicted_sentences = dict()
+    with torch.no_grad():
+        for image, _, image_names, _ in dataloader:
+            image = image.to(device)
+            if torch.cuda.device_count() > 1:
+                predicted_sents = model.module.beam_sample(image, image_names, processor,
+                                                           max_seq_length, beam_size)
+            else:
+                predicted_sents = model.beam_sample(image, image_names, processor, max_seq_length, beam_size)
+            predicted_sentences.update(predicted_sents)
+    model.train()
+    return predicted_sentences

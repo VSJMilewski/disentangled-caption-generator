@@ -1,23 +1,28 @@
-import pickle
-import os
-import time
 import argparse
+import os
+import pickle
+import time
+
 import numpy as np
 import torch
 from torch import nn
 from torch.optim import Adam, RMSprop, Adagrad
-from torchvision import transforms
 from torch.utils.data import DataLoader
-# import pycocotools  # cocoAPI
+from torchvision import transforms
 
 # import other files
-from model import CaptionModel  # , BinaryCaptionModel
-from vocab_flickr8k import DataProcessor
 from flickr_dataset import FlickrDataset
+from model import CaptionModel, BinaryCaptionModel
 from validation import validation_step
+from vocab import DataProcessor
 
 
-def print_info(file):
+def print_info(file=None):
+    """
+    Prints the header information for printing the results.
+    :param file: A file name where the information is printed to. If None, it prints to STDOUT
+    :return: Nothing
+    """
     if file:
         with open(file, 'a') as f:
             print('=' * 80 + '\n{:8s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t {:6s}\t{:7s}\n{}'.format(
@@ -27,7 +32,15 @@ def print_info(file):
             'EPOCH:', 'BLEU1', 'BLEU2', 'BLEU3', 'BLEU4', 'METEOR', 'ROGUEl', 'CIDer', 'Time', '=' * 80))
 
 
-def print_score(score, time_, epoch, file):
+def print_score(score, time_, epoch, file=None):
+    """
+    Prints the results of an epoch.
+    :param score: A dict with containing scores for the different metrics: BLEU1-4, METEOR< ROUGE_L and CIDEr
+    :param time_: The time in seconds the epoch took to run
+    :param epoch: The epoch for which the results are printed
+    :param file:  A file name where the information is printed to. If None, it prints to STDOUT
+    :return: Nothing
+    """
     if file:
         with open(file, 'a') as f:
             print('{:5d}   \t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:6.3f}\t{:7.3f}s'.format(
@@ -40,6 +53,14 @@ def print_score(score, time_, epoch, file):
 
 
 def print_final(score, time_, epoch, file):
+    """
+    Print a final summary of the entire training process
+    :param score: A dict with containing scores for the different metrics: BLEU1-4, METEOR< ROUGE_L and CIDEr
+    :param time_: The time in seconds the epoch took to run
+    :param epoch: The epoch for which the results are printed
+    :param file:  A file name where the information is printed to. If None, it prints to STDOUT
+    :return: Nothing
+    """
     print_info(file)
     if file:
         with open(file, 'a') as f:
@@ -56,7 +77,12 @@ def print_final(score, time_, epoch, file):
 
 
 def train():
-    # setup data stuff
+    """
+    The training process of the code
+    :return: Nothing
+    """
+
+    # Load files containing the image files for the data divisions
     with open(train_images_file) as f:
         train_images = f.read().splitlines()
     with open(dev_images_file) as f:
@@ -64,7 +90,7 @@ def train():
     with open(captions_file) as f:
         annotations = f.read().splitlines()
 
-    # data processor for vocab and their index mappings
+    # Setup a data processor for a vocabulary and index to word mappings.
     processor = DataProcessor(annotations, train_images, filename=train_vocab_file, vocab_size=config.vocab_size,
                               pad=config.pad, start=config.sos, end=config.eos, unk=config.unk,
                               vocab_threshold=config.vocab_threshold)
@@ -74,23 +100,31 @@ def train():
                                train_data_file, transform_train, config.max_seq_length, unique=False)
     dev_data = FlickrDataset(base_path_images, annotations, dev_images, processor,
                              dev_data_file, transform_eval, config.max_seq_length, unique=True)
-    # create the dataloader
+    test_data = FlickrDataset(base_path_images, annotations, dev_images, processor,
+                              test_data_file, transform_eval, config.max_seq_length, unique=True)
+
+    # create the dataloaders for handling batches
     train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
                               pin_memory=True, num_workers=config.num_workers, drop_last=True)
     dev_loader = DataLoader(dev_data, batch_size=config.batch_size, shuffle=False,
                             pin_memory=True, num_workers=config.num_workers, drop_last=True)
 
-    # create the models
+    # create the chosen model
     model = None
     if config.model == 'BASELINE':
-        model = CaptionModel(config.hidden_size, config.emb_size, processor.vocab_size, config.lstm_layers, device).to(
-            device)
-    # elif config.model == 'BINARY':
-    #     model = BinaryCaptionModel(config.hidden_size, processor.vocab_size, device).to(device)
+        model = CaptionModel(config.hidden_size, config.emb_size, processor.vocab_size,
+                             config.lstm_layers, device).to(device)
+    elif config.model == 'BINARY':
+        model = BinaryCaptionModel(config.hidden_size, config.emb_size, processor.vocab_size,
+                                   config.lstm_layers, device, number_of_topics=config.number_of_topics).to(device)
     else:
         exit('not an existing model!')
-    if config.num_workers > 0:
+
+    # if there are multiple GPUs, run the model in parallel on them
+    if torch.cuda.device_count() > 1:
         model = nn.DataParallel(model)
+
+    # setup the chosen optimizer with all trainable parameters
     params = filter(lambda p: p.requires_grad, model.parameters())
     opt = None
     if config.optimizer == 'Adam':
@@ -101,9 +135,12 @@ def train():
         opt = Adagrad(params, lr=config.learning_rate)
     else:
         exit('None existing optimizer')
+
+    # set the loss function. It has to ignore the padding and the reduction is done manually because of different
+    # sequence lengths within a batch
     criterion = nn.CrossEntropyLoss(ignore_index=processor.w2i[config.pad], reduction='none').to(device)
 
-    # Start training
+    # Setup variables to keep track of training process
     losses = []
     avg_losses = dict()
     val_losses = dict()
@@ -112,30 +149,38 @@ def train():
     best_bleu = -1
     best_epoch = -1
     number_up = 0
-    print('training started!')
     time_start0 = time.time()
+
+    # start training
     for epoch in range(config.max_epochs):
         time_start = time.time()
 
         # loop over all the training batches in the epoch
-        # for i_batch, batch in enumerate(batch_generator(train_data, config.batch_size, transform_train, device)):
         for i_batch, batch in enumerate(train_loader):
+            # make sure the GPUs are synchronised at the start of the batch
             torch.cuda.synchronize()
             opt.zero_grad()
             image, caption, _, caption_lengths = batch
+            # make sure the data is on the correct device
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
-            prediction, _ = model(image, caption)
+
+            # perform the forward pass through the model
+            prediction = model(image, caption)
+
+            # compute the loss by flattening all the results
             loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
                              caption[:, 1:].contiguous().view(-1))
-            # normalize loss where each sentence is a different length
+            # compute the average loss over the average losses of each sample in the batch
             loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
                                         caption_lengths)).sum()
             loss.backward()
             losses.append(float(loss))
+            # clip the gradients to avoid exploding gradients
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
             opt.step()
+            break
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
         loss_current_ind = len(losses)
@@ -145,6 +190,7 @@ def train():
                                           reference_file, criterion, device, beam_size=config.beam_size)
         scores.append(score)
         val_losses[len(losses)] = val_loss
+        # save the model and the results
         torch.save(model.cpu().state_dict(), last_epoch_file)
         model = model.to(device)
         pickle.dump(scores, open(score_pickle, 'wb'))
@@ -152,12 +198,16 @@ def train():
         pickle.dump(avg_losses, open(avg_loss_pickle, 'wb'))
         pickle.dump(val_losses, open(val_loss_pickle, 'wb'))
 
-        # test termination
+        # test termination because of time
         time_end = time.time()
+        if config.max_time and time_end - time_start0 > config.max_time:
+            break
+
+        # test if the model improved
         if score[config.eval_metric] <= best_bleu:
             number_up += 1
-            if (epoch > config.min_epochs and number_up > config.patience) \
-                    or (config.max_time and time_end - time_start0 > config.max_time):
+            # teset termination because we are out of patience
+            if epoch > config.min_epochs and number_up > config.patience:
                 break
         else:
             number_up = 0
@@ -166,7 +216,7 @@ def train():
             best_bleu = scores[-1][config.eval_metric]
             best_epoch = epoch
 
-        # print some info
+        # print training progress
         if epoch % 50 == 0:
             print_info(progress_file)
         print_score(scores[-1], time_end - time_start, epoch, progress_file)
@@ -188,6 +238,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_seq_length', type=int, default=100, help='Length of an input sequence')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--hidden_size', type=int, default=512, help='Number of hidden units in the LSTM')
+    parser.add_argument('--number_of_topics', type=int, default=100, help='For the topic modelling in the binary model')
     parser.add_argument('--emb_size', type=int, default=128, help='Number of hidden units in the LSTM')
     parser.add_argument('--num_layers', type=int, default=1, help='Number of LSTM layers in the model')
     parser.add_argument('--batch_size', type=int, default=256, help='Number of samples in batch')
@@ -204,7 +255,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, if there are more GPUs')
     parser.add_argument('--max_grad', type=float, default=5, help='max value for gradients')
-    parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurances to be in vocab')
+    parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurrences to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
     parser.add_argument('--unique', type=str, default='', help='string to make files unique')
     parser.add_argument('--progress_to_file', type=bool, default=True, help='if results should be printed to file')
@@ -212,6 +263,7 @@ if __name__ == "__main__":
     parser.add_argument('--optimizer', type=str, default='Adam', help='which optimizer to use')
 
     config = parser.parse_args()
+    # set which device to use
     device = torch.device(config.device)
 
     # globals for data transformations
@@ -266,6 +318,8 @@ if __name__ == "__main__":
                                    'data_{}_train_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
     dev_data_file = os.path.join(config.pickle_path,
                                  'data_{}_dev_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
+    test_data_file = os.path.join(config.pickle_path,
+                                  'data_{}_test_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
 
     # data files
     train_images_file = None
