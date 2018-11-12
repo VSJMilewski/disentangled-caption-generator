@@ -87,6 +87,8 @@ def train():
         train_images = f.read().splitlines()
     with open(dev_images_file) as f:
         dev_images = f.read().splitlines()
+    with open(test_images_file) as f:
+        test_images = f.read().splitlines()
     with open(captions_file) as f:
         annotations = f.read().splitlines()
 
@@ -100,14 +102,16 @@ def train():
                                train_data_file, transform_train, config.max_seq_length, unique=False)
     dev_data = FlickrDataset(base_path_images, annotations, dev_images, processor,
                              dev_data_file, transform_eval, config.max_seq_length, unique=True)
-    test_data = FlickrDataset(base_path_images, annotations, dev_images, processor,
+    test_data = FlickrDataset(base_path_images, annotations, test_images, processor,
                               test_data_file, transform_eval, config.max_seq_length, unique=True)
 
     # create the dataloaders for handling batches
     train_loader = DataLoader(train_data, batch_size=config.batch_size, shuffle=True,
                               pin_memory=True, num_workers=config.num_workers, drop_last=True)
     dev_loader = DataLoader(dev_data, batch_size=config.batch_size, shuffle=False,
-                            pin_memory=True, num_workers=config.num_workers, drop_last=True)
+                            pin_memory=True, num_workers=config.num_workers, drop_last=False)
+    test_loader = DataLoader(test_data, batch_size=config.batch_size, shuffle=False,
+                             pin_memory=True, num_workers=config.num_workers, drop_last=False)
 
     # create the chosen model
     model = None
@@ -222,6 +226,11 @@ def train():
         print_score(scores[-1], time_end - time_start, epoch, progress_file)
 
     print_final(scores[best_epoch], time.time() - time_start0, best_epoch, progress_file)
+    model.load_state_dict(torch.load(best_epoch_file))
+    test_score, _ = validation_step(model, test_loader, processor, config.max_seq_length, prediction_file,
+                                    test_reference_file, criterion, device, beam_size=config.beam_size)
+    print_score(test_score, time.time() - time_start0, 'TEST', progress_file)
+
 
 
 if __name__ == "__main__":
@@ -324,20 +333,26 @@ if __name__ == "__main__":
     # data files
     train_images_file = None
     dev_images_file = None
+    test_images_file = None
     base_path_images = None
     reference_file = None
+    test_reference_file = None
     captions_file = None
     if config.dataset == 'flickr8k':
         train_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.trainImages.txt')
         dev_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.devImages.txt')
+        test_images_file = os.path.join(config.data_path, 'flickr8k/Flickr_8k.testImages.txt')
         base_path_images = os.path.join(config.data_path, 'flickr8k/Flicker8k_Dataset/')
         reference_file = os.path.join(config.data_path, 'flickr8k/Flickr8k_references.dev.json')
+        test_reference_file = os.path.join(config.data_path, 'flickr8k/Flickr8k_references.test.json')
         captions_file = os.path.join(config.data_path, 'flickr8k/Flickr8k.token.txt')
     elif config.dataset == 'flickr30k':
         train_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.trainImages.txt')
         dev_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.devImages.txt')
+        test_images_file = os.path.join(config.data_path, 'flickr30k/flickr30k.testImages.txt')
         base_path_images = os.path.join(config.data_path, 'flickr30k/flickr30k_images/')
         reference_file = os.path.join(config.data_path, 'flickr30k/flickr30k_references.dev.json')
+        test_reference_file = os.path.join(config.data_path, 'flickr30k/flickr30k_references.test.json')
         captions_file = os.path.join(config.data_path, 'flickr30k/results_20130124.token')
     else:
         exit('Unknown dataset')
