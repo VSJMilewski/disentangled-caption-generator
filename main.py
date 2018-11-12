@@ -226,10 +226,17 @@ def train():
         print_score(scores[-1], time_end - time_start, epoch, progress_file)
 
     print_final(scores[best_epoch], time.time() - time_start0, best_epoch, progress_file)
+    model = model.cpu()
     model.load_state_dict(torch.load(best_epoch_file))
+    model.to(device)
+    # if there are multiple GPUs, run the model in parallel on them
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
     test_score, _ = validation_step(model, test_loader, processor, config.max_seq_length, prediction_file,
                                     test_reference_file, criterion, device, beam_size=config.beam_size)
-    print_score(test_score, time.time() - time_start0, 'TEST', progress_file)
+    print('===== TEST =====')
+    print_score(test_score, time.time() - time_start0, -1, progress_file)
+    pickle.dump(test_score, open(test_score_pickle, 'wb'))
 
 
 
@@ -318,6 +325,9 @@ if __name__ == "__main__":
     val_loss_pickle = os.path.join(config.output_path,
                                    'val_losses_{}_{}_beam{}_{}.pkl'.format(
                                        config.model, config.dataset, config.beam_size, config.unique))
+    test_score_pickle = os.path.join(config.output_path,
+                                     'test_score_{}_{}_beam{}_{}.pkl'.format(
+                                         config.model, config.dataset, config.beam_size, config.unique))
 
     # pickle files
     train_vocab_file = os.path.join(config.pickle_path,
