@@ -84,7 +84,7 @@ def greedy_validation(model, dataloader, processor, max_seq_length, device):
             image = image.to(device)
             input_ = torch.full((image.shape[0], 1), processor.w2i[processor.START], dtype=torch.long, device=device)
             if torch.cuda.device_count() > 1:
-                predicted_ids = model.module.greedy_sample(image, input_)
+                predicted_ids = model.module.greedy_sample(image, input_, max_seq_length)
             else:
                 predicted_ids = model.greedy_sample(image, input_, max_seq_length)
             # now derive the sentences
