@@ -61,6 +61,7 @@ def compute_validation_loss(model, dataloader, criterion, device):
             loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
                                         caption_lengths)).sum()
             losses.append(float(loss))
+            break
     model.train()
     return np.mean(losses)
 

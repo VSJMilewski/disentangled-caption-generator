@@ -63,7 +63,7 @@ class Beam(object):
         word_lk = self.mask.unsqueeze(1).expand_as(word_lk) * word_lk
         # expanding with padding is free if the end of the sentence is reached. This ensures
         # that short sentence can also be predicted
-        word_lk[(self.mask < 0).nonzero(), self.processor.PAD] = 0
+        word_lk[(self.mask < 0).nonzero(), self.processor.w2i[self.processor.PAD]] = 0
 
         # Sum the previous scores.
         if len(self.prevKs) > 0:
@@ -82,15 +82,16 @@ class Beam(object):
         self.prevKs.append(prev_k)
         self.nextYs.append(best_scores_id - prev_k * num_words)
 
-        # Update sequence scores and erase scores for end-of-sentence symbol so that they aren't expanded
+        # Update sequence scores and erase scores for EOS and PAD symbols so that they aren't expanded
         # stored_scores.append(best_scores.clone())
-        eos_indices = self.nextYs[-1].data.eq(self.processor.w2i[self.processor.END])
-        if eos_indices.nonzero().dim() > 0:
+        eos_indices = self.nextYs[-1].data.eq(self.processor.w2i[self.processor.END]) + \
+                      self.nextYs[-1].data.eq(self.processor.w2i[self.processor.PAD])
+        if eos_indices.nonzero().dim() > 1:
             self.mask.fill_(1) # reset mask, finished seq might be dropped
             self.mask.data.masked_fill_(eos_indices, -float('inf'))
 
-        # end condition when all paths reached EOS
-        if (self.mask == 1).nonzero():
+        # end condition when all paths reached EOS, so all ones removed from mask
+        if (self.mask == 1).nonzero().dim() < 2:
             self.done = True
 
         # # End condition is when top-of-beam is EOS.

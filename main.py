@@ -184,7 +184,6 @@ def train():
             # clip the gradients to avoid exploding gradients
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
             opt.step()
-            break
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
         loss_current_ind = len(losses)
@@ -237,7 +236,6 @@ def train():
     print('===== TEST =====')
     print_score(test_score, time.time() - time_start0, -1, progress_file)
     pickle.dump(test_score, open(test_score_pickle, 'wb'))
-
 
 
 if __name__ == "__main__":
@@ -302,9 +300,11 @@ if __name__ == "__main__":
     prediction_file = os.path.join(config.output_path,
                                    '{}_{}_beam{}_{}.pred'.format(
                                        config.model, config.dataset, config.beam_size, config.unique))
-    progress_file = os.path.join(config.output_path,
-                                 '{}_{}_beam{}_{}.out'.format(
-                                     config.model, config.dataset, config.beam_size, config.unique))
+    progress_file = None
+    if config.progress_to_file:
+        progress_file = os.path.join(config.output_path,
+                                     '{}_{}_beam{}_{}.out'.format(
+                                         config.model, config.dataset, config.beam_size, config.unique))
 
     # output files
     last_epoch_file = os.path.join(config.output_path,
