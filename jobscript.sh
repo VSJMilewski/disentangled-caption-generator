@@ -1,6 +1,6 @@
 #PBS -qgpu
 #PBS -lnodes=1
-#PBS -lwalltime=1:00:00
+#PBS -lwalltime=48:00:00
 
 module load eb/3.7.0
 module load python/3.5.0
@@ -23,7 +23,7 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 512 --min_epochs 0 --max_epochs 500 --patience 10 --vocab_threshold 5 --max_time 9999999 --max_grad 5 --optimizer Adagrad --unique adagrad_gradclip5_2lstm &
+python3 $HOME/multimodal-descriptions/main.py --beam_size 20 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --unique adam_test_beam20 &
 #python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:1 --min_epochs 50 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 10 --optimizer Adam --unique adam_grad10 &
 #python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:2 --min_epochs 50 --patience 10 --vocab_threshold 5 --max_time 169200 --optimizer Adagrad --unique adagrad &
 #python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda:3 --min_epochs 50 --patience 10 --vocab_threshold 5 --max_time 169200 --optimizer RMSprop --unique rmsprop &
