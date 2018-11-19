@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision import models
 
@@ -111,7 +110,6 @@ class DescriptionDecoder(nn.Module):
         :param hidden_size: The size of the hidden layers
         :param embedding_size: The size of the embeddings
         :param lstm_layers: How many hidden layers in LSTM network
-        :param p: The dropout probability
         """
         super().__init__()
 
@@ -128,6 +126,7 @@ class DescriptionDecoder(nn.Module):
         """
 
         :param topic_features:
+        :param z0:
         :return:
         """
         # find alphas
@@ -173,7 +172,7 @@ class DescriptionDecoder(nn.Module):
 
 
 class CaptionModel(nn.Module):
-    def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, device):
+    def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, dropout_p, device):
         """
         Initialize the captioning model. It combines both the encoder and decoder model.
         :param hidden_size: Size of the hidden layers
@@ -188,7 +187,8 @@ class CaptionModel(nn.Module):
         self.hidden_size = hidden_size
         self.lstm_layers = lstm_layers
         self.encoder = EncoderCNN(embedding_size, device).to(device)
-        self.decoder = Decoder(target_vocab_size, hidden_size, embedding_size, lstm_layers=lstm_layers).to(device)
+        self.decoder = Decoder(target_vocab_size, hidden_size, embedding_size,
+                               lstm_layers=lstm_layers, p=dropout_p).to(device)
         self.h0_lin = nn.Linear(embedding_size, hidden_size)
         self.c0_lin = nn.Linear(embedding_size, hidden_size)
         self.init_weights()
@@ -259,7 +259,7 @@ class CaptionModel(nn.Module):
         # prepare decoder initial hidden state
         img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
         h0 = self.h0_lin(img_emb)
-        h0 = h0.repeat(self.lstm_layers, beam_size, 1)
+        h0 = h0.repeat(self.lstm_layers, beam_size, 1)  # for each chain in the beam a copy of hidden
         c0 = self.c0_lin(img_emb)
         c0 = c0.repeat(self.lstm_layers, beam_size, 1)
         hidden_state = (h0, c0)
@@ -280,7 +280,7 @@ class CaptionModel(nn.Module):
 
             # process lstm step in beam search
             word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()
-            active = []  # list of not finisched samples
+            active = []  # list of not finished samples
             for b in range(b_size):
                 # if the current sample is done, skip it
                 if beam[b].done:
@@ -334,7 +334,8 @@ class CaptionModel(nn.Module):
 
 
 class BinaryCaptionModel(nn.Module):
-    def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, device, number_of_topics=100):
+    def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, dropout_p,
+                 device, train_method, number_of_topics=100):
         """
         Initialize the binary captioning model. It combines both the encoder and decoder model. It uses a switch to
         determine at each time step to use the language model or the description model as decoder.
@@ -348,10 +349,14 @@ class BinaryCaptionModel(nn.Module):
         super().__init__()
         self.device = device
         self.lstm_layers = lstm_layers
+        self.hidden_size = hidden_size
+        self.embedding_size = embedding_size
         self.vocab_size = target_vocab_size
+        self.train_method = train_method
 
         self.encoder = EncoderCNN(embedding_size, device).to(device)
-        self.lang_decoder = Decoder(target_vocab_size, hidden_size, embedding_size, lstm_layers=lstm_layers).to(device)
+        self.lang_decoder = Decoder(target_vocab_size, hidden_size, embedding_size,
+                                    lstm_layers=lstm_layers, p=dropout_p).to(device)
         self.desc_decoder = DescriptionDecoder(hidden_size, embedding_size, number_of_topics,
                                                target_vocab_size, lstm_layers=lstm_layers).to(device)
 
@@ -405,9 +410,14 @@ class BinaryCaptionModel(nn.Module):
             pred_desc_model = self.desc_decoder(topic_features, z0)
 
             # select which prediction to use based on the switch
-            mask = torch.round(Bi).type(torch.long)
-            predictions[mask, i, :] = pred_lang_model[mask, :]
-            predictions[1 - mask, i, :] = pred_desc_model[1 - mask, :]
+            if self.train_method == 'SWITCHED':
+                mask = torch.round(Bi).type(torch.long)
+                predictions[mask, i, :] = pred_lang_model[mask, :]
+                predictions[1 - mask, i, :] = pred_desc_model[1 - mask, :]
+            elif self.train_method == 'WEIGHTED':
+                predictions[:, i, :] = Bi * pred_lang_model + (1-Bi) * pred_desc_model
+            else:
+                exit('Unknown train method {}. Use either SWITCHED or WEIGHTED'.format(self.train_method))
         return predictions
 
     def greedy_sample(self, images, input_, max_seq_length):
@@ -476,17 +486,31 @@ class BinaryCaptionModel(nn.Module):
         :return:
         """
         predicted_sentences = dict()
+
+        # get the batch size
+        b_size = images.shape[0]
+
         # Encode
         img_emb = self.encoder(images)
+
         # prepare decoder initial hidden state
-        img_emb = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-        h0 = self.h0_lin(img_emb)
+        h_init = img_emb.unsqueeze(0)  # seq len, batch size, emb size
+        h0 = self.h0_lin(h_init)
         h0 = h0.repeat(self.lstm_layers, beam_size, 1)
-        c0 = self.c0_lin(img_emb)
+        c0 = self.c0_lin(h_init)
         c0 = c0.repeat(self.lstm_layers, beam_size, 1)
         hidden_state = (h0, c0)
 
-        b_size = images.shape[0]
+        # compute sentence mixing coefficient
+        pi0 = torch.relu(self.sent_topic_lin1(img_emb))
+        pi0 = torch.relu(self.sent_topic_lin2(pi0))
+        pi0 = torch.softmax(pi0, dim=-1)
+
+        # compute global topic embedding
+        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings.weight)
+
+        img_emb = img_emb.repeat(beam_size, 1)
+        z0 = z0.repeat(beam_size, 1)
 
         # create the initial beam
         beam = [Beam(beam_size, processor, device=self.device) for _ in range(b_size)]
@@ -496,13 +520,33 @@ class BinaryCaptionModel(nn.Module):
 
         # Decode
         for w_idx in range(max_seq_length):
+            topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
-            out, hidden_state = self.decoder(input_, hidden_state)
-            out = torch.softmax(out, dim=2)
+
+            # the topic features are now of repeats of the batch stacked under each other. It should be
+            # repeats of the sample for the remaining samples in the batch. So: [[1],[2],[1],[2]] -> [[1],[1],[2],[2]]
+            topic_features = torch.stack([topic_features[range(i, topic_features.shape[0], b_size)]
+                                          for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
+
+            # compute the switch
+            Bi = torch.relu(self.switch_lin1(topic_features))
+            Bi = torch.relu(self.switch_lin2(Bi))
+            Bi = torch.sigmoid(Bi)
+
+            # compute the next timesteps
+            pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
+            pred_lang_model = pred_lang_model.squeeze(1)
+            pred_desc_model = self.desc_decoder(topic_features, z0)
+
+            # select which prediction to use based on the switch
+            out = pred_desc_model
+            mask = torch.round(Bi).type(torch.long)
+            out[mask,:] = pred_lang_model[mask, :]
+            out = torch.softmax(out, dim=-1)
 
             # process lstm step in beam search
             word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()
-            active = []  # list of not finisched samples
+            active = []  # list of not finished samples
             for b in range(b_size):
                 # if the current sample is done, skip it
                 if beam[b].done:
@@ -516,7 +560,6 @@ class BinaryCaptionModel(nn.Module):
                 for dec_state in hidden_state:  # iterate over h, c
                     sent_states = dec_state.view(-1, beam_size, remaining_sents, dec_state.size(2))[:, :, idx]
                     sent_states.data.copy_(sent_states.data.index_select(1, beam[b].get_current_origin()))
-
             # test if the beam is finished
             if not active:
                 break
@@ -535,6 +578,8 @@ class BinaryCaptionModel(nn.Module):
 
             hidden_state = (update_active(hidden_state[0], self.hidden_size),
                             update_active(hidden_state[1], self.hidden_size))
+            img_emb = update_active(img_emb, self.embedding_size)
+            z0 = update_active(z0, self.hidden_size)
             remaining_sents = len(active)
 
         # select the best hypothesis
@@ -543,7 +588,6 @@ class BinaryCaptionModel(nn.Module):
             hyp = beam[b].get_hyp(k)
             predicted_sentences[image_names[b]] = [processor.i2w[idx.item()] for idx in hyp]
         return predicted_sentences
-
 
     def init_weights(self):
         """
@@ -565,4 +609,3 @@ class BinaryCaptionModel(nn.Module):
         nn.init.xavier_normal_(self.switch_lin2.weight)
         nn.init.constant_(self.switch_lin1.bias, 0.0)
         nn.init.constant_(self.switch_lin2.bias, 0.0)
-

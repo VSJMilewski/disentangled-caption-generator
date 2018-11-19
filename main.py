@@ -117,10 +117,11 @@ def train():
     model = None
     if config.model == 'BASELINE':
         model = CaptionModel(config.hidden_size, config.emb_size, processor.vocab_size,
-                             config.lstm_layers, device).to(device)
+                             config.lstm_layers, config.dropout_prob, device).to(device)
     elif config.model == 'BINARY':
         model = BinaryCaptionModel(config.hidden_size, config.emb_size, processor.vocab_size,
-                                   config.lstm_layers, device, number_of_topics=config.number_of_topics).to(device)
+                                   config.lstm_layers, config.dropout_prob, device, config.binary_train_method,
+                                   number_of_topics=config.number_of_topics).to(device)
     else:
         exit('not an existing model!')
 
@@ -172,7 +173,6 @@ def train():
 
             # perform the forward pass through the model
             prediction = model(image, caption)
-
             # compute the loss by flattening all the results
             loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
                              caption[:, 1:].contiguous().view(-1))
@@ -233,7 +233,12 @@ def train():
         model = nn.DataParallel(model)
     test_score, _ = validation_step(model, test_loader, processor, config.max_seq_length, prediction_file,
                                     test_reference_file, criterion, device, beam_size=config.beam_size)
-    print('===== TEST =====')
+
+    if progress_file:
+        with open(progress_file, 'a') as f:
+            print('===== TEST =====', file=f)
+    else:
+        print('===== TEST =====')
     print_score(test_score, time.time() - time_start0, -1, progress_file)
     pickle.dump(test_score, open(test_score_pickle, 'wb'))
 
@@ -265,9 +270,12 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', type=str, default='data', help='location where to store data')
     parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
+    parser.add_argument('--binary_train_method', type=str, default='WEIGHTED', help='how to train the switch: '
+                                                                                    'WEIGHTED, SWITCHED')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
-    parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, if there are more GPUs')
+    parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
+                                                                   'For 4 GPUs, use 16' )
     parser.add_argument('--max_grad', type=float, default=5, help='max value for gradients')
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurrences to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
@@ -296,49 +304,40 @@ if __name__ == "__main__":
         transforms.Normalize((0.485, 0.456, 0.406),
                              (0.229, 0.224, 0.225))])
 
+    pickle_unique = '{dataset}_{vocab}_th{threshold}'.format(dataset=config.dataset,
+                                                              vocab=config.vocab_size,
+                                                              threshold=config.vocab_threshold)
+    file_unique = '{model}_{data}_beam{beam}_lstm{layers}_pat{pat}_emb{emb}_hidden{hidden}_p{p}_opt{opt}_grad{grad}'.format(
+        model=config.model, data=config.dataset, beam=config.beam_size, layers=config.lstm_layers, pat=config.patience,
+        emb=config.emb_size, hidden=config.hidden_size, p=config.dropout_prob, opt=config.optimizer,
+        grad=config.max_grad)
+    if config.model == 'BINARY':
+        file_unique += '_topics{}'.format(config.number_of_topics)
+
+    # create directories from the file uniques
+    os.makedirs(os.path.join(config.output_path, file_unique), exist_ok=True)
+    os.makedirs(os.path.join(config.pickle_path, pickle_unique), exist_ok=True)
+
     # temporary files
-    prediction_file = os.path.join(config.output_path,
-                                   '{}_{}_beam{}_{}.pred'.format(
-                                       config.model, config.dataset, config.beam_size, config.unique))
+    prediction_file = os.path.join(config.output_path,file_unique, 'predictions.txt')
     progress_file = None
     if config.progress_to_file:
-        progress_file = os.path.join(config.output_path,
-                                     '{}_{}_beam{}_{}.out'.format(
-                                         config.model, config.dataset, config.beam_size, config.unique))
+        progress_file = os.path.join(config.output_path, file_unique, ' progress.txt')
 
     # output files
-    last_epoch_file = os.path.join(config.output_path,
-                                   'last_{}_beam{}_{}_{}.pkl'.format(
-                                       config.dataset, config.beam_size, config.model, config.unique))
-    best_epoch_file = os.path.join(config.output_path,
-                                   'best_{}_beam{}_{}_{}.pkl'.format(
-                                       config.dataset, config.beam_size, config.model, config.unique))
-    score_pickle = os.path.join(config.output_path,
-                                'scores_{}_{}_beam{}_{}.pkl'.format(
-                                    config.model, config.dataset, config.beam_size, config.unique))
-    loss_pickle = os.path.join(config.output_path,
-                               'losses_{}_{}_beam{}_{}.pkl'.format(
-                                   config.model, config.dataset, config.beam_size, config.unique))
-    avg_loss_pickle = os.path.join(config.output_path,
-                                   'avg_losses_{}_{}_beam{}_{}.pkl'.format(
-                                       config.model, config.dataset, config.beam_size, config.unique))
-    val_loss_pickle = os.path.join(config.output_path,
-                                   'val_losses_{}_{}_beam{}_{}.pkl'.format(
-                                       config.model, config.dataset, config.beam_size, config.unique))
-    test_score_pickle = os.path.join(config.output_path,
-                                     'test_score_{}_{}_beam{}_{}.pkl'.format(
-                                         config.model, config.dataset, config.beam_size, config.unique))
+    last_epoch_file = os.path.join(config.output_path, file_unique, 'last_epoch.pkl')
+    best_epoch_file = os.path.join(config.output_path, file_unique, 'best_epoch.pkl')
+    score_pickle = os.path.join(config.output_path, file_unique, 'scores_train.pkl')
+    loss_pickle = os.path.join(config.output_path, file_unique, 'losses_train.pkl')
+    avg_loss_pickle = os.path.join(config.output_path, file_unique, 'losses_train_avg.pkl')
+    val_loss_pickle = os.path.join(config.output_path, file_unique, 'losses_eval.pkl')
+    test_score_pickle = os.path.join(config.output_path, file_unique, 'scores_test.pkl')
 
     # pickle files
-    train_vocab_file = os.path.join(config.pickle_path,
-                                    'train_{}_vocab_{}_th_{}.pkl'.format(
-                                        config.dataset, config.vocab_size, config.vocab_threshold))
-    train_data_file = os.path.join(config.pickle_path,
-                                   'data_{}_train_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
-    dev_data_file = os.path.join(config.pickle_path,
-                                 'data_{}_dev_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
-    test_data_file = os.path.join(config.pickle_path,
-                                  'data_{}_test_th_{}.pkl'.format(config.dataset, config.vocab_threshold))
+    train_vocab_file = os.path.join(config.pickle_path, pickle_unique, 'vocab_train.pkl')
+    train_data_file = os.path.join(config.pickle_path, pickle_unique, 'data_train.pkl')
+    dev_data_file = os.path.join(config.pickle_path, pickle_unique, 'data_eval.pkl')
+    test_data_file = os.path.join(config.pickle_path, pickle_unique, 'data_test.pkl')
 
     # data files
     train_images_file = None
