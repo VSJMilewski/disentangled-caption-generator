@@ -263,7 +263,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=256, help='Number of samples in batch')
     parser.add_argument('--lstm_layers', type=int, default=2, help='Number of lstm layers')
     parser.add_argument('--beam_size', type=int, default=20, help='size of the beam during eval, use 1 for greedy')
-        parser.add_argument('--dropout_prob', type=float, default=0.5, help='Dropout keep probability')
+    parser.add_argument('--dropout_prob', type=float, default=0.5, help='Dropout keep probability')
     parser.add_argument('--min_epochs', type=int, default=0, help='Min number of training steps')
     parser.add_argument('--max_epochs', type=int, default=1000, help='Number of training steps')
     parser.add_argument('--output_path', type=str, default='output', help='location where to store the output')
