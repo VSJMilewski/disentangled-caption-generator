@@ -23,8 +23,8 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adagrad
+# python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam
+# python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adagrad
 python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer RMSProp
 
 

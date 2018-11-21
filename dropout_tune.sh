@@ -23,11 +23,11 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.5
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.7
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.8
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.1
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.2
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.3
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.4
 python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.9
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 1000 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --dropout_prob 0.6
 
 echo ""
 echo ""
