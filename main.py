@@ -275,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
-                                                                   'For 4 GPUs, use 16' )
+                                                                   'For 4 GPUs, use 16')
     parser.add_argument('--max_grad', type=float, default=5, help='max value for gradients')
     parser.add_argument('--vocab_threshold', type=int, default=5, help='minimum number of occurrences to be in vocab')
     parser.add_argument('--eval_metric', type=str, default='Bleu_4', help='on which metric to do early stopping')
