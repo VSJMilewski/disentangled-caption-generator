@@ -313,7 +313,7 @@ if __name__ == "__main__":
         emb=config.emb_size, hidden=config.hidden_size, p=config.dropout_prob, opt=config.optimizer,
         grad=config.max_grad)
     if config.model == 'BINARY':
-        file_unique += '_topics{}'.format(config.number_of_topics)
+        file_unique += '_topics{}_{}'.format(config.number_of_topics, config.binary_train_method)
 
     # create directories from the file uniques
     os.makedirs(os.path.join(config.output_path, file_unique), exist_ok=True)
