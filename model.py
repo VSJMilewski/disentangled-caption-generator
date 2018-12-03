@@ -395,8 +395,16 @@ class BinaryCaptionModel(nn.Module):
         # compute global topic embedding
         z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings.weight)
 
+        if self.train_method == 'WEIGHTED_LOSS':
+            predictions = (torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size),
+                                       device=self.device),
+                           torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size),
+                                       device=self.device),
+                           torch.empty((captions.shape[0], captions.shape[1] - 1), device=self.device))
+        else:
+            predictions = torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size), device=self.device)
+
         # loop over the sequence length
-        predictions = torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size), device=self.device)
         for i in range(captions.shape[1] - 1):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
@@ -416,8 +424,13 @@ class BinaryCaptionModel(nn.Module):
                 predictions[1 - mask, i, :] = pred_desc_model[1 - mask, :]
             elif self.train_method == 'WEIGHTED':
                 predictions[:, i, :] = Bi * pred_lang_model + (1-Bi) * pred_desc_model
+            elif self.train_method == 'WEIGHTED_LOSS':
+                predictions[0][:, i, :] = pred_lang_model
+                predictions[1][:, i, :] = pred_desc_model
+                predictions[1][:, i] = Bi
             else:
-                exit('Unknown train method {}. Use either SWITCHED or WEIGHTED'.format(self.train_method))
+                exit('Unknown train method {}. Use either SWITCHED, WEIGHTED, '
+                     'or WEIGHTED_LOSS'.format(self.train_method))
         return predictions
 
     def greedy_sample(self, images, input_, max_seq_length):

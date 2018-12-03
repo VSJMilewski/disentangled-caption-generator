@@ -174,11 +174,19 @@ def train():
             # perform the forward pass through the model
             prediction = model(image, caption)
             # compute the loss by flattening all the results
-            loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
-                             caption[:, 1:].contiguous().view(-1))
+            if type(prediction) is tuple:
+                loss_lang = criterion(prediction[0].contiguous().view(-1, prediction[0].shape[2]),
+                                      caption[:, 1:].contiguous().view(-1)).view(prediction[0].shape[0],
+                                                                                 prediction[0].shape[1])
+                loss_desc = criterion(prediction[1].contiguous().view(-1, prediction[1].shape[2]),
+                                      caption[:, 1:].contiguous().view(-1)).view(prediction[1].shape[0],
+                                                                                 prediction[1].shape[1])
+                loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
+            else:
+                loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
+                                 caption[:, 1:].contiguous().view(-1)).view(prediction.shape[0], prediction.shape[1])
             # compute the average loss over the average losses of each sample in the batch
-            loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
-                                        caption_lengths)).sum()
+            loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
             loss.backward()
             losses.append(float(loss))
             # clip the gradients to avoid exploding gradients
@@ -271,7 +279,7 @@ if __name__ == "__main__":
     parser.add_argument('--pickle_path', type=str, default='pickles', help='location where to store pickles')
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--binary_train_method', type=str, default='WEIGHTED', help='how to train the switch: '
-                                                                                    'WEIGHTED, SWITCHED')
+                                                                                    'WEIGHTED, SWITCHED, WEIGHTED_LOSS')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
@@ -323,7 +331,7 @@ if __name__ == "__main__":
     prediction_file = os.path.join(config.output_path,file_unique, 'predictions.txt')
     progress_file = None
     if config.progress_to_file:
-        progress_file = os.path.join(config.output_path, file_unique, ' progress.txt')
+        progress_file = os.path.join(config.output_path, file_unique, 'progress.txt')
 
     # output files
     last_epoch_file = os.path.join(config.output_path, file_unique, 'last_epoch.pkl')

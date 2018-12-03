@@ -55,11 +55,19 @@ def compute_validation_loss(model, dataloader, criterion, device):
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
             prediction = model(image, caption)
-            loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
-                             caption[:, 1:].contiguous().view(-1))
-            # normalize loss where each sentence is a different length
-            loss = torch.mean(torch.div(loss.view(prediction.shape[0], prediction.shape[1]).sum(dim=1),
-                                        caption_lengths)).sum()
+            if type(prediction) is tuple:
+                loss_lang = criterion(prediction[0].contiguous().view(-1, prediction[0].shape[2]),
+                                      caption[:, 1:].contiguous().view(-1)).view(prediction[0].shape[0],
+                                                                                 prediction[0].shape[1])
+                loss_desc = criterion(prediction[1].contiguous().view(-1, prediction[1].shape[2]),
+                                      caption[:, 1:].contiguous().view(-1)).view(prediction[1].shape[0],
+                                                                                 prediction[1].shape[1])
+                loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
+            else:
+                loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
+                                 caption[:, 1:].contiguous().view(-1)).view(prediction.shape[0], prediction.shape[1])
+            # compute the average loss over the average losses of each sample in the batch
+            loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
             losses.append(float(loss))
     model.train()
     return np.mean(losses)
