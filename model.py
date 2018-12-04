@@ -4,7 +4,7 @@ from torch.autograd import Variable
 from torchvision import models
 
 from beam_search import Beam
-
+import numpy as np
 
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
@@ -408,16 +408,17 @@ class BinaryCaptionModel(nn.Module):
         for i in range(captions.shape[1] - 1):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            Bi = torch.relu(self.switch_lin1(topic_features))
-            Bi = torch.relu(self.switch_lin2(Bi))
+            Bi = torch.tanh(self.switch_lin1(topic_features))
+            Bi = torch.tanh(self.switch_lin2(Bi))
             Bi = torch.sigmoid(Bi)
+            print(np.round(Bi.min().item(), 3), np.round(Bi.max().item(), 3), np.round(Bi.mean().item(), 3))
 
             # compute the next timesteps outputs
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
             pred_desc_model = self.desc_decoder(topic_features, z0)
 
-            # select which prediction to use based on the switch
+            # # select which prediction to use based on the switch
             if self.train_method == 'SWITCHED':
                 mask = torch.round(Bi).type(torch.long)
                 predictions[mask, i, :] = pred_lang_model[mask, :]
@@ -427,7 +428,7 @@ class BinaryCaptionModel(nn.Module):
             elif self.train_method == 'WEIGHTED_LOSS':
                 predictions[0][:, i, :] = pred_lang_model
                 predictions[1][:, i, :] = pred_desc_model
-                predictions[1][:, i] = Bi
+                predictions[2][:, i] = Bi.squeeze()
             else:
                 exit('Unknown train method {}. Use either SWITCHED, WEIGHTED, '
                      'or WEIGHTED_LOSS'.format(self.train_method))
