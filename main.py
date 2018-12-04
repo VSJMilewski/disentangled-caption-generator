@@ -181,17 +181,33 @@ def train():
                 loss_desc = criterion(prediction[1].contiguous().view(-1, prediction[1].shape[2]),
                                       caption[:, 1:].contiguous().view(-1)).view(prediction[1].shape[0],
                                                                                  prediction[1].shape[1])
-                loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
+                if epoch < 5:
+                    loss_lang = torch.mean(torch.div(loss_lang.sum(dim=1), caption_lengths)).sum()
+                    loss_desc = torch.mean(torch.div(loss_desc.sum(dim=1), caption_lengths)).sum()
+                    loss_lang.backward(retain_graph=True)
+                    loss_desc.backward()
+                    torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
+                    opt.step()
+                    losses.append(float((loss_lang+loss_desc)/2))
+                else:
+                    loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
+                    # compute the average loss over the average losses of each sample in the batch
+                    loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
+                    loss.backward()
+                    losses.append(float(loss))
+                    # clip the gradients to avoid exploding gradients
+                    torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
+                    opt.step()
             else:
                 loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
                                  caption[:, 1:].contiguous().view(-1)).view(prediction.shape[0], prediction.shape[1])
-            # compute the average loss over the average losses of each sample in the batch
-            loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
-            loss.backward()
-            losses.append(float(loss))
-            # clip the gradients to avoid exploding gradients
-            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
-            opt.step()
+                # compute the average loss over the average losses of each sample in the batch
+                loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
+                loss.backward()
+                losses.append(float(loss))
+                # clip the gradients to avoid exploding gradients
+                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
+                opt.step()
         # store epoch results
         avg_losses[len(losses)] = np.mean(losses[loss_current_ind:])
         loss_current_ind = len(losses)
