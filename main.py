@@ -181,23 +181,29 @@ def train():
                 loss_desc = criterion(prediction[1].contiguous().view(-1, prediction[1].shape[2]),
                                       caption[:, 1:].contiguous().view(-1)).view(prediction[1].shape[0],
                                                                                  prediction[1].shape[1])
-                if epoch < 5:
+
+                loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
+
+                if epoch < config.epochs_model_training:
                     loss_lang = torch.mean(torch.div(loss_lang.sum(dim=1), caption_lengths)).sum()
                     loss_desc = torch.mean(torch.div(loss_desc.sum(dim=1), caption_lengths)).sum()
+
                     loss_lang.backward(retain_graph=True)
-                    loss_desc.backward()
                     torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
                     opt.step()
-                    losses.append(float((loss_lang+loss_desc)/2))
-                else:
-                    loss = prediction[2] * loss_lang + (1 - prediction[2]) * loss_desc
-                    # compute the average loss over the average losses of each sample in the batch
-                    loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
-                    loss.backward()
-                    losses.append(float(loss))
-                    # clip the gradients to avoid exploding gradients
+                    opt.zero_grad()
+                    loss_desc.backward(retain_graph=True)
                     torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
                     opt.step()
+
+                opt.zero_grad()
+                # compute the average loss over the average losses of each sample in the batch
+                loss = torch.mean(torch.div(loss.sum(dim=1), caption_lengths)).sum()
+                loss.backward()
+                losses.append(float(loss))
+                # clip the gradients to avoid exploding gradients
+                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=config.max_grad)
+                opt.step()
             else:
                 loss = criterion(prediction.contiguous().view(-1, prediction.shape[2]),
                                  caption[:, 1:].contiguous().view(-1)).view(prediction.shape[0], prediction.shape[1])
@@ -296,6 +302,7 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--binary_train_method', type=str, default='WEIGHTED', help='how to train the switch: '
                                                                                     'WEIGHTED, SWITCHED, WEIGHTED_LOSS')
+    parser.add_argument('--epochs_model_training', type=int, default=10, help='extra training of models individually')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
