@@ -406,6 +406,7 @@ class BinaryCaptionModel(nn.Module):
 
         # loop over the sequence length
         for i in range(captions.shape[1] - 1):
+            # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
             Bi = torch.tanh(self.switch_lin1(topic_features))
@@ -418,13 +419,15 @@ class BinaryCaptionModel(nn.Module):
             pred_lang_model = pred_lang_model.squeeze(1)
             pred_desc_model = self.desc_decoder(topic_features, z0)
 
-            # # select which prediction to use based on the switch
+            # select which prediction to use based on the switch
             if self.train_method == 'SWITCHED':
                 mask = torch.round(Bi).type(torch.long)
                 predictions[mask, i, :] = pred_lang_model[mask, :]
                 predictions[1 - mask, i, :] = pred_desc_model[1 - mask, :]
+            # make a weighted decision, with the switch being the weight
             elif self.train_method == 'WEIGHTED':
                 predictions[:, i, :] = Bi * pred_lang_model + (1-Bi) * pred_desc_model
+            # return both predictions, to compute loss for both
             elif self.train_method == 'WEIGHTED_LOSS':
                 predictions[0][:, i, :] = pred_lang_model
                 predictions[1][:, i, :] = pred_desc_model
@@ -467,8 +470,8 @@ class BinaryCaptionModel(nn.Module):
         for i in range(max_seq_length):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            Bi = torch.relu(self.switch_lin1(topic_features))
-            Bi = torch.relu(self.switch_lin2(Bi))
+            Bi = torch.tanh(self.switch_lin1(topic_features))
+            Bi = torch.tanh(self.switch_lin2(Bi))
             Bi = torch.sigmoid(Bi)
 
             # compute the next timesteps
@@ -543,8 +546,8 @@ class BinaryCaptionModel(nn.Module):
                                           for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
 
             # compute the switch
-            Bi = torch.relu(self.switch_lin1(topic_features))
-            Bi = torch.relu(self.switch_lin2(Bi))
+            Bi = torch.tanh(self.switch_lin1(topic_features))
+            Bi = torch.tanh(self.switch_lin2(Bi))
             Bi = torch.sigmoid(Bi)
 
             # compute the next timesteps
