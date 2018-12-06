@@ -29,10 +29,9 @@ def validation_step(model, dataloader, processor, max_seq_length, pred_file, ref
     # Compute score of metrics
     with open(pred_file, 'w', encoding='utf-8') as f:
         for im, p in predicted_sentences.items():
-            if p:
-                if p[-1] == processor.END:
-                    p = p[:-1]
-                f.write(im + '\t' + ' '.join(p) + '\n')
+            if p[-1] == processor.END:
+                p = p[:-1]
+            f.write(im + '\t' + ' '.join(p) + '\n')
     score = evaluate(pred_file, ref_file)
     return score, val_loss
 

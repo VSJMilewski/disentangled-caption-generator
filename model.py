@@ -487,7 +487,6 @@ class BinaryCaptionModel(nn.Module):
             input_ = torch.argmax(input_, dim=-1)
             input_ = input_.unsqueeze(1)
             predicted_ids.append(input_.clone())
-
         # now derive the sentences
         predicted_ids = torch.cat(predicted_ids, 1)
         return predicted_ids
