@@ -394,7 +394,7 @@ class BinaryCaptionModel(nn.Module):
 
         # compute sentence mixing coefficient
         pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = torch.relu(self.sent_topic_lin2(pi0))
+        pi0 = self.sent_topic_lin2(pi0)
         pi0 = torch.softmax(pi0, dim=-1)
 
         # compute global topic embedding
