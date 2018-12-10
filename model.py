@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torchvision import models
+from collections import OrderedDict
+import numpy as np
+from random import random
 
 from beam_search import Beam
-import numpy as np
+
 
 class EncoderCNN(nn.Module):
     def __init__(self, embedding_size, device):
@@ -113,13 +116,23 @@ class DescriptionDecoder(nn.Module):
         """
         super().__init__()
 
-        self.topic_embeddings = nn.Embedding(number_of_topics, embedding_size)
-        self.alpha_lin1 = nn.Linear(embedding_size * 2 + hidden_size * lstm_layers, hidden_size)
-        self.alpha_lin2 = nn.Linear(hidden_size, hidden_size)
-        self.pos_topic_lin1 = nn.Linear(hidden_size, hidden_size)
-        self.pos_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
-        self.output_lin1 = nn.Linear(embedding_size * 2, hidden_size)
-        self.output_lin2 = nn.Linear(hidden_size, target_vocab_size)
+        # self.topic_embeddings = nn.Embedding(number_of_topics, embedding_size)
+        self.topic_embeddings = torch.nn.Parameter(data=torch.Tensor(number_of_topics, embedding_size),
+                                                   requires_grad=True)
+
+        self.softmax_alpha = nn.Sequential(
+            OrderedDict([('r31', nn.Linear(embedding_size * 2 + hidden_size * lstm_layers, hidden_size)),
+                         ('relu31', nn.ReLU()),
+                         ('r32', nn.Linear(hidden_size, hidden_size)),
+                         ('relu32', nn.ReLU()),
+                         ('r41', nn.Linear(hidden_size, hidden_size)),
+                         ('relu41`', nn.ReLU()),
+                         ('r41', nn.Linear(hidden_size, number_of_topics)),
+                         ('softmax', nn.Softmax(dim=-1))]))
+
+        self.g = nn.Sequential(OrderedDict([('r51', nn.Linear(embedding_size * 2, hidden_size)),
+                                            ('relu1', nn.ReLU()),
+                                            ('r52', nn.Linear(hidden_size, target_vocab_size))]))
         self.init_weights()
 
     def forward(self, topic_features, z0):
@@ -129,22 +142,15 @@ class DescriptionDecoder(nn.Module):
         :param z0:
         :return:
         """
-        # find alphas
-        q = torch.relu(self.alpha_lin1(topic_features))
-        q = torch.relu(self.alpha_lin2(q))
+        # find timesteps mixing coefficient
+        pii = self.softmax_alpha(topic_features)
 
-        # find topic distribution
-        pii = torch.relu(self.pos_topic_lin1(q))
-        pii = self.pos_topic_lin2(pii)
-        pii = torch.softmax(pii, dim=-1)
-
-        # find mixing coefficient
-        zi = torch.matmul(pii, self.topic_embeddings.weight)
+        # find timesteps topic embedding
+        zi = torch.matmul(pii, self.topic_embeddings)
 
         # find prediction using g
         output_features = torch.cat((z0, zi), dim=-1)
-        out = torch.relu(self.output_lin1(output_features))
-        out = self.output_lin2(out)
+        out = self.g(output_features)
         return out
 
     def init_weights(self):
@@ -153,22 +159,17 @@ class DescriptionDecoder(nn.Module):
         with all zeros. The embeddings are initialized with a uniform distribution.
         :return: Nothing
         """
-        nn.init.xavier_uniform_(self.topic_embeddings.weight)
+        nn.init.xavier_uniform_(self.topic_embeddings)
 
-        nn.init.xavier_normal_(self.alpha_lin1.weight)
-        nn.init.xavier_normal_(self.alpha_lin2.weight)
-        nn.init.constant_(self.alpha_lin1.bias, 0.0)
-        nn.init.constant_(self.alpha_lin2.bias, 0.0)
+        for m in self.softmax_alpha.children():
+            if type(m) == nn.Linear:
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
 
-        nn.init.xavier_normal_(self.pos_topic_lin1.weight)
-        nn.init.xavier_normal_(self.pos_topic_lin2.weight)
-        nn.init.constant_(self.pos_topic_lin1.bias, 0.0)
-        nn.init.constant_(self.pos_topic_lin2.bias, 0.0)
-
-        nn.init.xavier_normal_(self.output_lin1.weight)
-        nn.init.xavier_normal_(self.output_lin2.weight)
-        nn.init.constant_(self.output_lin1.bias, 0.0)
-        nn.init.constant_(self.output_lin2.bias, 0.0)
+        for m in self.g.children():
+            if type(m) == nn.Linear:
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
 
 
 class CaptionModel(nn.Module):
@@ -363,15 +364,21 @@ class BinaryCaptionModel(nn.Module):
         self.h0_lin = nn.Linear(embedding_size, hidden_size)
         self.c0_lin = nn.Linear(embedding_size, hidden_size)
 
-        self.sent_topic_lin1 = nn.Linear(embedding_size, hidden_size)
-        self.sent_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
-        self.switch_lin1 = nn.Linear(embedding_size * 2 + hidden_size * lstm_layers, hidden_size)
-        self.switch_lin2 = nn.Linear(hidden_size, 1)
+        self.softmax_alpha_0 = nn.Sequential(OrderedDict([('r11', nn.Linear(embedding_size, hidden_size)),
+                                                          ('relu', nn.ReLU()),
+                                                          ('r12', nn.Linear(hidden_size, number_of_topics)),
+                                                         ('softmax', nn.Softmax(dim=-1))]))
 
-        self.weight_v = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
-        self.weight_z = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
-        self.weight_h = torch.nn.Parameter(data=torch.Tensor(hidden_size * lstm_layers, 1), requires_grad=True)
-        self.bias_switch = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
+        self.sigmoid_s = nn.Sequential(OrderedDict([('r21', nn.Linear(embedding_size * 2 + hidden_size * lstm_layers,
+                                                                      hidden_size)),
+                                                    ('relu', nn.ReLU()),
+                                                    ('r22', nn.Linear(hidden_size, 1)),
+                                                    ('sigmoid', nn.Sigmoid())]))
+
+        # self.weight_v = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
+        # self.weight_z = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
+        # self.weight_h = torch.nn.Parameter(data=torch.Tensor(hidden_size * lstm_layers, 1), requires_grad=True)
+        # self.bias_switch = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
         self.init_weights()
 
     def forward(self, images, captions):
@@ -393,12 +400,10 @@ class BinaryCaptionModel(nn.Module):
         hidden_state = (h0, c0)
 
         # compute sentence mixing coefficient
-        pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = self.sent_topic_lin2(pi0)
-        pi0 = torch.softmax(pi0, dim=-1)
+        pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
-        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings.weight)
+        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
 
         if self.train_method == 'WEIGHTED_LOSS':
             predictions = (torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size),
@@ -414,16 +419,15 @@ class BinaryCaptionModel(nn.Module):
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            # Bi = torch.relu(self.switch_lin1(topic_features))
-            # Bi = self.switch_lin2(Bi)
-            # Bi = torch.sigmoid(Bi)
-            s = torch.matmul(img_emb, self.weight_v) + \
-                torch.matmul(z0, self.weight_z) + \
-                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-                self.bias_switch
-            # s = self.switch_lin2(s)
-            Bi = torch.sigmoid(s)
-            # print(np.round(Bi.min().item(), 3), np.round(Bi.max().item(), 3), np.round(Bi.mean().item(), 3))
+            Bi = self.sigmoid_s(topic_features)
+            if random() > 0.9:
+                Bi = 1 - Bi
+            # s = torch.matmul(img_emb, self.weight_v) + \
+            #     torch.matmul(z0, self.weight_z) + \
+            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+            #     self.bias_switch
+            # Bi = torch.sigmoid(s)
+            print(np.round(Bi.min().item(), 3), np.round(Bi.max().item(), 3), np.round(Bi.mean().item(), 3))
 
             # compute the next timesteps outputs
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
@@ -469,27 +473,22 @@ class BinaryCaptionModel(nn.Module):
         hidden_state = (h0, c0)
 
         # compute sentence mixing coefficient
-        pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = self.sent_topic_lin2(pi0)
-        pi0 = torch.softmax(pi0, dim=-1)
+        pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
-        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings.weight)
+        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
 
         # loop over the sequence length
         predicted_ids = []
         for i in range(max_seq_length):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            # Bi = torch.relu(self.switch_lin1(topic_features))
-            # Bi = self.switch_lin2(Bi)
-            # Bi = torch.sigmoid(Bi)
-            s = torch.matmul(img_emb, self.weight_v) + \
-                torch.matmul(z0, self.weight_z) + \
-                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-                self.bias_switch
-            # s = self.switch_lin2(s)
-            Bi = torch.sigmoid(s)
+            Bi = self.sigmoid_s(topic_features)
+            # s = torch.matmul(img_emb, self.weight_v) + \
+            #     torch.matmul(z0, self.weight_z) + \
+            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+            #     self.bias_switch
+            # Bi = torch.sigmoid(s)
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
@@ -535,12 +534,10 @@ class BinaryCaptionModel(nn.Module):
         hidden_state = (h0, c0)
 
         # compute sentence mixing coefficient
-        pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = self.sent_topic_lin2(pi0)
-        pi0 = torch.softmax(pi0, dim=-1)
+        pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
-        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings.weight)
+        z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
 
         img_emb = img_emb.repeat(beam_size, 1)
         z0 = z0.repeat(beam_size, 1)
@@ -562,15 +559,12 @@ class BinaryCaptionModel(nn.Module):
                                           for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
 
             # compute the switch
-            # Bi = torch.relu(self.switch_lin1(topic_features))
-            # Bi = self.switch_lin2(Bi)
-            # Bi = torch.sigmoid(Bi)
-            s = torch.matmul(img_emb, self.weight_v) + \
-                torch.matmul(z0, self.weight_z) + \
-                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-                self.bias_switch
-            # s = self.switch_lin2(s)
-            Bi = torch.sigmoid(s)
+            Bi = self.sigmoid_s(topic_features)
+            # s = torch.matmul(img_emb, self.weight_v) + \
+            #     torch.matmul(z0, self.weight_z) + \
+            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+            #     self.bias_switch
+            # Bi = torch.sigmoid(s)
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
@@ -639,17 +633,27 @@ class BinaryCaptionModel(nn.Module):
         nn.init.constant_(self.h0_lin.bias, 0.0)
         nn.init.constant_(self.c0_lin.bias, 0.0)
 
-        nn.init.xavier_normal_(self.sent_topic_lin1.weight)
-        nn.init.xavier_normal_(self.sent_topic_lin2.weight)
-        nn.init.constant_(self.sent_topic_lin1.bias, 0.0)
-        nn.init.constant_(self.sent_topic_lin2.bias, 0.0)
+        for m in self.softmax_alpha_0.children():
+            if type(m) == nn.Linear:
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
 
-        nn.init.xavier_normal_(self.switch_lin1.weight)
-        nn.init.xavier_normal_(self.switch_lin2.weight)
-        nn.init.constant_(self.switch_lin1.bias, 0.0)
-        nn.init.constant_(self.switch_lin2.bias, 0.0)
-
-        nn.init.xavier_normal_(self.weight_v)
-        nn.init.xavier_normal_(self.weight_z)
-        nn.init.xavier_normal_(self.weight_h)
-        nn.init.constant_(self.bias_switch, 0.0)
+        for m in self.sigmoid_s.children():
+            if type(m) == nn.Linear:
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
+        #
+        # nn.init.xavier_normal_(self.sent_topic_lin1.weight)
+        # nn.init.xavier_normal_(self.sent_topic_lin2.weight)
+        # nn.init.constant_(self.sent_topic_lin1.bias, 0.0)
+        # nn.init.constant_(self.sent_topic_lin2.bias, 0.0)
+        #
+        # nn.init.xavier_normal_(self.switch_lin1.weight)
+        # nn.init.xavier_normal_(self.switch_lin2.weight)
+        # nn.init.constant_(self.switch_lin1.bias, 0.0)
+        # nn.init.constant_(self.switch_lin2.bias, 0.0)
+        #
+        # nn.init.xavier_normal_(self.weight_v)
+        # nn.init.xavier_normal_(self.weight_z)
+        # nn.init.xavier_normal_(self.weight_h)
+        # nn.init.constant_(self.bias_switch, 0.0)
