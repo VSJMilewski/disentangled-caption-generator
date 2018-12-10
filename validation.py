@@ -59,7 +59,6 @@ def compute_validation_loss(model, dataloader, criterion, device):
             caption_lengths = caption_lengths.to(device)
             prediction = model(image, caption)
             if type(prediction) is tuple:
-                #TODO: ADD options for the other binary training
                 loss_lang = criterion(prediction[0].contiguous().view(-1, prediction[0].shape[2]),
                                       caption[:, 1:].contiguous().view(-1)).view(prediction[0].shape[0],
                                                                                  prediction[0].shape[1])
