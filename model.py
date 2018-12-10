@@ -135,7 +135,7 @@ class DescriptionDecoder(nn.Module):
 
         # find topic distribution
         pii = torch.relu(self.pos_topic_lin1(q))
-        pii = torch.relu(self.pos_topic_lin2(pii))
+        pii = self.pos_topic_lin2(pii)
         pii = torch.softmax(pii, dim=-1)
 
         # find mixing coefficient
@@ -144,7 +144,7 @@ class DescriptionDecoder(nn.Module):
         # find prediction using g
         output_features = torch.cat((z0, zi), dim=-1)
         out = torch.relu(self.output_lin1(output_features))
-        out = torch.relu(self.output_lin2(out))
+        out = self.output_lin2(out)
         return out
 
     def init_weights(self):
@@ -367,6 +367,11 @@ class BinaryCaptionModel(nn.Module):
         self.sent_topic_lin2 = nn.Linear(hidden_size, number_of_topics)
         self.switch_lin1 = nn.Linear(embedding_size * 2 + hidden_size * lstm_layers, hidden_size)
         self.switch_lin2 = nn.Linear(hidden_size, 1)
+
+        self.weight_v = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
+        self.weight_z = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
+        self.weight_h = torch.nn.Parameter(data=torch.Tensor(hidden_size * lstm_layers, 1), requires_grad=True)
+        self.bias_switch = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
         self.init_weights()
 
     def forward(self, images, captions):
@@ -409,10 +414,16 @@ class BinaryCaptionModel(nn.Module):
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            Bi = torch.tanh(self.switch_lin1(topic_features))
-            Bi = torch.tanh(self.switch_lin2(Bi))
-            Bi = torch.sigmoid(Bi)
-            print(np.round(Bi.min().item(), 3), np.round(Bi.max().item(), 3), np.round(Bi.mean().item(), 3))
+            # Bi = torch.tanh(self.switch_lin1(topic_features))
+            # Bi = self.switch_lin2(Bi)
+            # Bi = torch.sigmoid(Bi)
+            s = torch.matmul(img_emb, self.weight_v) + \
+                torch.matmul(z0, self.weight_z) + \
+                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+                self.bias_switch
+            # s = self.switch_lin2(s)
+            Bi = torch.sigmoid(s)
+            # print(np.round(Bi.min().item(), 3), np.round(Bi.max().item(), 3), np.round(Bi.mean().item(), 3))
 
             # compute the next timesteps outputs
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
@@ -470,9 +481,15 @@ class BinaryCaptionModel(nn.Module):
         for i in range(max_seq_length):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            Bi = torch.tanh(self.switch_lin1(topic_features))
-            Bi = torch.tanh(self.switch_lin2(Bi))
-            Bi = torch.sigmoid(Bi)
+            # Bi = torch.tanh(self.switch_lin1(topic_features))
+            # Bi = torch.tanh(self.switch_lin2(Bi))
+            # Bi = torch.sigmoid(Bi)
+            s = torch.matmul(img_emb, self.weight_v) + \
+                torch.matmul(z0, self.weight_z) + \
+                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+                self.bias_switch
+            s = self.switch_lin2(s)
+            Bi = torch.sigmoid(s)
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
@@ -545,9 +562,15 @@ class BinaryCaptionModel(nn.Module):
                                           for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
 
             # compute the switch
-            Bi = torch.tanh(self.switch_lin1(topic_features))
-            Bi = torch.tanh(self.switch_lin2(Bi))
-            Bi = torch.sigmoid(Bi)
+            # Bi = torch.tanh(self.switch_lin1(topic_features))
+            # Bi = torch.tanh(self.switch_lin2(Bi))
+            # Bi = torch.sigmoid(Bi)
+            s = torch.matmul(img_emb, self.weight_v) + \
+                torch.matmul(z0, self.weight_z) + \
+                torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
+                self.bias_switch
+            s = self.switch_lin2(s)
+            Bi = torch.sigmoid(s)
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
@@ -625,3 +648,8 @@ class BinaryCaptionModel(nn.Module):
         nn.init.xavier_normal_(self.switch_lin2.weight)
         nn.init.constant_(self.switch_lin1.bias, 0.0)
         nn.init.constant_(self.switch_lin2.bias, 0.0)
+
+        nn.init.xavier_normal_(self.weight_v)
+        nn.init.xavier_normal_(self.weight_z)
+        nn.init.xavier_normal_(self.weight_h)
+        nn.init.constant_(self.bias_switch, 0.0)
