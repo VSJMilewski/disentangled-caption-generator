@@ -488,7 +488,7 @@ class BinaryCaptionModel(nn.Module):
                 torch.matmul(z0, self.weight_z) + \
                 torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
                 self.bias_switch
-            s = self.switch_lin2(s)
+            # s = self.switch_lin2(s)
             Bi = torch.sigmoid(s)
 
             # compute the next timesteps
@@ -569,7 +569,7 @@ class BinaryCaptionModel(nn.Module):
                 torch.matmul(z0, self.weight_z) + \
                 torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
                 self.bias_switch
-            s = self.switch_lin2(s)
+            # s = self.switch_lin2(s)
             Bi = torch.sigmoid(s)
 
             # compute the next timesteps
