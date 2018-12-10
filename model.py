@@ -414,7 +414,7 @@ class BinaryCaptionModel(nn.Module):
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            # Bi = torch.tanh(self.switch_lin1(topic_features))
+            # Bi = torch.relu(self.switch_lin1(topic_features))
             # Bi = self.switch_lin2(Bi)
             # Bi = torch.sigmoid(Bi)
             s = torch.matmul(img_emb, self.weight_v) + \
@@ -470,7 +470,7 @@ class BinaryCaptionModel(nn.Module):
 
         # compute sentence mixing coefficient
         pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = torch.relu(self.sent_topic_lin2(pi0))
+        pi0 = self.sent_topic_lin2(pi0)
         pi0 = torch.softmax(pi0, dim=-1)
 
         # compute global topic embedding
@@ -481,8 +481,8 @@ class BinaryCaptionModel(nn.Module):
         for i in range(max_seq_length):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
-            # Bi = torch.tanh(self.switch_lin1(topic_features))
-            # Bi = torch.tanh(self.switch_lin2(Bi))
+            # Bi = torch.relu(self.switch_lin1(topic_features))
+            # Bi = self.switch_lin2(Bi)
             # Bi = torch.sigmoid(Bi)
             s = torch.matmul(img_emb, self.weight_v) + \
                 torch.matmul(z0, self.weight_z) + \
@@ -536,7 +536,7 @@ class BinaryCaptionModel(nn.Module):
 
         # compute sentence mixing coefficient
         pi0 = torch.relu(self.sent_topic_lin1(img_emb))
-        pi0 = torch.relu(self.sent_topic_lin2(pi0))
+        pi0 = self.sent_topic_lin2(pi0)
         pi0 = torch.softmax(pi0, dim=-1)
 
         # compute global topic embedding
@@ -562,8 +562,8 @@ class BinaryCaptionModel(nn.Module):
                                           for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
 
             # compute the switch
-            # Bi = torch.tanh(self.switch_lin1(topic_features))
-            # Bi = torch.tanh(self.switch_lin2(Bi))
+            # Bi = torch.relu(self.switch_lin1(topic_features))
+            # Bi = self.switch_lin2(Bi)
             # Bi = torch.sigmoid(Bi)
             s = torch.matmul(img_emb, self.weight_v) + \
                 torch.matmul(z0, self.weight_z) + \
