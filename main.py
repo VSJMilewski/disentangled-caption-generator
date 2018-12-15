@@ -199,6 +199,7 @@ def train():
         loss_current_ind = len(losses)
 
         # validation
+        print('\n')
         score, val_loss = validation_step(model, dev_loader, processor, config.max_seq_length, prediction_file,
                                           reference_file, criterion, device, beam_size=config.beam_size)
         scores.append(score)
