@@ -420,8 +420,8 @@ class BinaryCaptionModel(nn.Module):
             topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
             # compute the switch
             Bi = self.sigmoid_s(topic_features)
-            if random() > 0.5:
-                Bi = 1 - Bi
+            # if random() > 0.5:
+            #     Bi = 1 - Bi
             # s = torch.matmul(img_emb, self.weight_v) + \
             #     torch.matmul(z0, self.weight_z) + \
             #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
