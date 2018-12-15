@@ -111,7 +111,7 @@ def train():
     dev_loader = DataLoader(dev_data, batch_size=config.batch_size, shuffle=False,
                             pin_memory=True, num_workers=config.num_workers, drop_last=False)
     test_loader = DataLoader(test_data, batch_size=config.batch_size, shuffle=False,
-                             pin_memory=True, num_workers=config.num_workers, drop_last=False)
+                             pin_memory=True, drop_last=False)
 
     # create the chosen model
     model = None
@@ -167,6 +167,7 @@ def train():
             torch.cuda.synchronize()
             opt.zero_grad()
             image, caption, _, caption_lengths = batch
+            caption = caption[:, :int(caption_lengths.max().item())]
             # make sure the data is on the correct device
             image = image.to(device)
             caption = caption.to(device)
@@ -237,9 +238,6 @@ def train():
     model = model.cpu()
     model.load_state_dict(torch.load(best_epoch_file))
     model.to(device)
-    # if there are multiple GPUs, run the model in parallel on them
-    if torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
     test_score, _ = validation_step(model, test_loader, processor, config.max_seq_length, prediction_file,
                                     test_reference_file, criterion, device, beam_size=config.beam_size)
 

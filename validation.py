@@ -54,6 +54,7 @@ def compute_validation_loss(model, dataloader, criterion, device):
         for i_batch, batch in enumerate(dataloader):
             torch.cuda.synchronize()
             image, caption, _, caption_lengths = batch
+            caption = caption[:, :int(caption_lengths.max().item())]
             image = image.to(device)
             caption = caption.to(device)
             caption_lengths = caption_lengths.to(device)
