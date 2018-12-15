@@ -436,8 +436,8 @@ class BinaryCaptionModel(nn.Module):
             # select which prediction to use based on the switch
             if self.train_method == 'SWITCHED':
                 mask = torch.round(Bi).type(torch.long)
-                predictions[mask, i, :] = pred_lang_model[mask, :]
-                predictions[1 - mask, i, :] = pred_desc_model[1 - mask, :]
+                predictions[mask == 1, i, :] = pred_lang_model[mask == 1, :]
+                predictions[mask == 0, i, :] = pred_desc_model[mask == 0, :]
             # make a weighted decision, with the switch being the weight
             elif self.train_method == 'WEIGHTED':
                 predictions[:, i, :] = Bi * pred_lang_model + (1-Bi) * pred_desc_model
@@ -497,8 +497,8 @@ class BinaryCaptionModel(nn.Module):
             # select which prediction to use based on the switch
             input_ = torch.empty((img_emb.shape[0], self.vocab_size), device=self.device)
             mask = torch.round(Bi).type(torch.long)
-            input_[mask, :] = pred_lang_model[mask, :]
-            input_[1 - mask, :] = pred_desc_model[1 - mask, :]
+            input_[mask == 1, :] = pred_lang_model[mask == 1, :]
+            input_[mask == 0, :] = pred_desc_model[mask == 0, :]
             input_ = torch.argmax(input_, dim=-1)
             input_ = input_.unsqueeze(1)
             predicted_ids.append(input_.clone())
