@@ -488,7 +488,7 @@ class BinaryCaptionModel(nn.Module):
             #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
             #     self.bias_switch
             # Bi = torch.sigmoid(s)
-            print(np.round(Bi.min().item().numpy(), 2), np.round(Bi.max().item().numpy(), 2), np.round(Bi.mean().item().numpy(), 2))
+            print(np.round(Bi.min().item(), 2), np.round(Bi.max().item(), 2), np.round(Bi.mean().item(), 2))
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
