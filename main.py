@@ -317,7 +317,7 @@ if __name__ == "__main__":
     pickle_unique = '{dataset}_{vocab}_th{threshold}'.format(dataset=config.dataset,
                                                               vocab=config.vocab_size,
                                                               threshold=config.vocab_threshold)
-    file_unique = '{model}_{data}_beam{beam}_lstm{layers}_pat{pat}_emb{emb}_hidden{hidden}_p{p}_opt{opt}_grad{grad}'.format(
+    file_unique = 'rand_{model}_{data}_beam{beam}_lstm{layers}_pat{pat}_emb{emb}_hidden{hidden}_p{p}_opt{opt}_grad{grad}'.format(
         model=config.model, data=config.dataset, beam=config.beam_size, layers=config.lstm_layers, pat=config.patience,
         emb=config.emb_size, hidden=config.hidden_size, p=config.dropout_prob, opt=config.optimizer,
         grad=config.max_grad)
