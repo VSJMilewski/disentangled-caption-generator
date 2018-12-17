@@ -466,7 +466,6 @@ class BinaryCaptionModel(nn.Module):
 
             # compute the switch
             Bi = self.sigmoid_s(switch_features)
-            print(np.round(Bi.min().item(), 2), np.round(Bi.max().item(), 2), np.round(Bi.mean().item(), 2))
 
             # compute the next timesteps outputs
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
