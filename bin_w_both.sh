@@ -1,6 +1,10 @@
-#PBS -qgpu
-#PBS -lnodes=1
-#PBS -lwalltime=48:00:00
+#!/bin/bash
+
+#SBATCH -p gpu
+#SBATCH -t 48:00:00
+
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=victormilewski@gmail.com
 
 module load eb/3.7.0
 module load python/3.5.0
@@ -31,5 +35,4 @@ python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dat
 echo ""
 echo ""
 echo "tarring output to home"
-tar zcf $HOME/multimodal-descriptions/output_$PBS_JOBID.tar.gz output pickles
-echo "Job $PBS_JOBID, bin_w both ended at `date`" | mail $USER -s "Job $PBS_JOBID"
+tar zcf $HOME/multimodal-descriptions/output_$SLURM_JOBID.tar.gz output pickles
