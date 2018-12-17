@@ -121,6 +121,7 @@ def train():
     elif config.model == 'BINARY':
         model = BinaryCaptionModel(config.hidden_size, config.emb_size, processor.vocab_size,
                                    config.lstm_layers, config.dropout_prob, device, config.binary_train_method,
+                                   config.hinit_method, config.switch_feature, config.desc_feature,
                                    number_of_topics=config.number_of_topics).to(device)
     else:
         exit('not an existing model!')
@@ -280,7 +281,12 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='BASELINE', help='which model to use: BASELINE, BINARY')
     parser.add_argument('--binary_train_method', type=str, default='WEIGHTED', help='how to train the switch: '
                                                                                     'WEIGHTED, SWITCHED, WEIGHTED_LOSS')
-    parser.add_argument('--epochs_model_training', type=int, default=10, help='extra training of models individually')
+    parser.add_argument('--hinit_method', type=str, default='ZEROS', help='how to train init the LSTM: '
+                                                                          'ZEROS, TOPICS')
+    parser.add_argument('--switch_feature', type=str, default='IMAGE', help='Which set of features to use for switch: '
+                                                                       'IMAGE, PAST_TOPICS')
+    parser.add_argument('--desc_feature', type=str, default='BOTH', help='Which set of features to use for desc_dec: '
+                                                                     'BOTH, IMAGE_ONLY, PAST_ONLY, NEITHER')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
@@ -322,7 +328,11 @@ if __name__ == "__main__":
         emb=config.emb_size, hidden=config.hidden_size, p=config.dropout_prob, opt=config.optimizer,
         grad=config.max_grad)
     if config.model == 'BINARY':
-        file_unique += '_topics{}_{}'.format(config.number_of_topics, config.binary_train_method)
+        file_unique += '_topics{top}_{train}_{hinit}_{switch}_{desc}'.format(top=config.number_of_topics,
+                                                                             train=config.binary_train_method,
+                                                                             hinit=config.hinit_method,
+                                                                             switch=config.switch_feature,
+                                                                             desc=config.desc_feature)
 
     # create directories from the file uniques
     os.makedirs(os.path.join(config.output_path, file_unique), exist_ok=True)

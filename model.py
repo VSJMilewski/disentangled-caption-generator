@@ -106,7 +106,7 @@ class Decoder(nn.Module):
 
 
 class DescriptionDecoder(nn.Module):
-    def __init__(self, hidden_size, embedding_size, number_of_topics, target_vocab_size, lstm_layers=2):
+    def __init__(self, hidden_size, embedding_size, number_of_topics, target_vocab_size, desc_feature, lstm_layers=2):
         """
         Initialize the global description decoder model. This model generates captions given encoded images.
         :param target_vocab_size: The vocabulary size
@@ -120,8 +120,20 @@ class DescriptionDecoder(nn.Module):
         self.topic_embeddings = torch.nn.Parameter(data=torch.Tensor(number_of_topics, embedding_size),
                                                    requires_grad=True)
 
+        num_features = None
+        if desc_feature == 'BOTH':
+            num_features = embedding_size*3+hidden_size*lstm_layers
+        elif desc_feature == 'IMAGE_ONLY':
+            num_features = embedding_size * 3
+        elif desc_feature == 'PAST_ONLY':
+            num_features = embedding_size * 2 + hidden_size * lstm_layers
+        elif desc_feature == 'NEITHER':
+            num_features = embedding_size * 2
+        else:
+            exit('not a valid switch_feature. Use one of: \'BOTH\', \'IMAGE_ONLY\', \'PAST_ONLY\', \'NEITHER\'.')
+
         self.softmax_alpha = nn.Sequential(
-            OrderedDict([('r31', nn.Linear(embedding_size * 2 + hidden_size * lstm_layers, hidden_size)),
+            OrderedDict([('r31', nn.Linear(num_features, hidden_size)),
                          ('relu31', nn.ReLU()),
                          ('r32', nn.Linear(hidden_size, hidden_size)),
                          ('relu32', nn.ReLU()),
@@ -151,7 +163,7 @@ class DescriptionDecoder(nn.Module):
         # find prediction using g
         output_features = torch.cat((z0, zi), dim=-1)
         out = self.g(output_features)
-        return out
+        return out, pii
 
     def init_weights(self):
         """
@@ -336,7 +348,7 @@ class CaptionModel(nn.Module):
 
 class BinaryCaptionModel(nn.Module):
     def __init__(self, hidden_size, embedding_size, target_vocab_size, lstm_layers, dropout_p,
-                 device, train_method, number_of_topics=100):
+                 device, train_method, hinit_method, switch_feature, desc_feature, number_of_topics=100):
         """
         Initialize the binary captioning model. It combines both the encoder and decoder model. It uses a switch to
         determine at each time step to use the language model or the description model as decoder.
@@ -354,12 +366,15 @@ class BinaryCaptionModel(nn.Module):
         self.embedding_size = embedding_size
         self.vocab_size = target_vocab_size
         self.train_method = train_method
+        self.hinit_method = hinit_method
+        self.switch_feature = switch_feature
+        self.desc_feature = desc_feature
 
         self.encoder = EncoderCNN(embedding_size, device).to(device)
         self.lang_decoder = Decoder(target_vocab_size, hidden_size, embedding_size,
                                     lstm_layers=lstm_layers, p=dropout_p).to(device)
         self.desc_decoder = DescriptionDecoder(hidden_size, embedding_size, number_of_topics,
-                                               target_vocab_size, lstm_layers=lstm_layers).to(device)
+                                               target_vocab_size, desc_feature, lstm_layers=lstm_layers).to(device)
 
         self.h0_lin = nn.Linear(embedding_size, hidden_size)
         self.c0_lin = nn.Linear(embedding_size, hidden_size)
@@ -374,11 +389,6 @@ class BinaryCaptionModel(nn.Module):
                                                     ('relu', nn.ReLU()),
                                                     ('r22', nn.Linear(hidden_size, 1)),
                                                     ('sigmoid', nn.Sigmoid())]))
-
-        # self.weight_v = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
-        # self.weight_z = torch.nn.Parameter(data=torch.Tensor(embedding_size, 1), requires_grad=True)
-        # self.weight_h = torch.nn.Parameter(data=torch.Tensor(hidden_size * lstm_layers, 1), requires_grad=True)
-        # self.bias_switch = torch.nn.Parameter(data=torch.Tensor(1), requires_grad=True)
         self.init_weights()
 
     def forward(self, images, captions):
@@ -391,19 +401,29 @@ class BinaryCaptionModel(nn.Module):
         # Encode
         img_emb = self.encoder(images)
 
-        # prepare decoder initial hidden state
-        h_init = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-        h0 = self.h0_lin(h_init)
-        h0 = h0.repeat(self.lstm_layers, 1, 1)
-        c0 = self.c0_lin(h_init)
-        c0 = c0.repeat(self.lstm_layers, 1, 1)
-        hidden_state = (h0, c0)
-
         # compute sentence mixing coefficient
         pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
         z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
+
+        # prepare decoder initial hidden state
+        if self.hinit_method == 'ZEROS':
+            h0 = torch.zeros([self.lstm_layers, img_emb.shape[0], self.hidden_size], device=self.device)
+            c0 = torch.zeros([self.lstm_layers, img_emb.shape[0], self.hidden_size], device=self.device)
+        elif self.hinit_method == 'TOPICS':
+            h_init = z0.unsqueeze(0)  # seq len, batch size, emb size
+            h0 = self.h0_lin(h_init)
+            h0 = h0.repeat(self.lstm_layers, 1, 1)
+            c0 = self.c0_lin(h_init)
+            c0 = c0.repeat(self.lstm_layers, 1, 1)
+        else:
+            h0, c0 = None, None
+            exit('not a valid hinit_method. Use one of: \'ZEROS\', \'TOPICS\'.')
+        hidden_state = (h0, c0)
+
+        # create a variable for summing the past topic distributions
+        pi_sum = torch.zeros_like(pi0, device=self.device)
 
         if self.train_method == 'WEIGHTED_LOSS':
             predictions = (torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size),
@@ -415,23 +435,44 @@ class BinaryCaptionModel(nn.Module):
             predictions = torch.empty((captions.shape[0], captions.shape[1] - 1, self.vocab_size), device=self.device)
 
         # loop over the sequence length
+        pi_pasts = [torch.zeros_like(pi0, device=self.device)]
         for i in range(captions.shape[1] - 1):
+            # compute z_past
+            if i != 0:
+                pi_pasts.append(pi0 * 1/i * pi_sum)
+            z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
+
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
-            topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            if self.switch_feature == 'IMAGE':
+                switch_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            elif self.switch_feature == 'PAST_TOPICS':
+                switch_features = torch.cat([z_past, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            else:
+                switch_features = None
+                exit('not a valid switch_feature. Use one of: \'IMAGE\', \'PAST_TOPICS\'.')
+
+            if self.desc_feature == 'BOTH':
+                desc_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past],
+                                          dim=-1)
+            elif self.desc_feature == 'IMAGE_ONLY':
+                desc_features = torch.cat([img_emb, z0, z_past], dim=-1)
+            elif self.desc_feature == 'PAST_ONLY':
+                desc_features = torch.cat([z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past], dim=-1)
+            elif self.desc_feature == 'NEITHER':
+                desc_features = torch.cat([z0, z_past], dim=-1)
+            else:
+                desc_features = None
+                exit('not a valid switch_feature. Use one of: \'BOTH\', \'IMAGE_ONLY\', \'PAST_ONLY\', \'NEITHER\'.')
+
             # compute the switch
-            Bi = self.sigmoid_s(topic_features)
-            if random() > 0.5:
-                Bi = 1 - Bi
-            # s = torch.matmul(img_emb, self.weight_v) + \
-            #     torch.matmul(z0, self.weight_z) + \
-            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-            #     self.bias_switch
-            # Bi = torch.sigmoid(s)
+            Bi = self.sigmoid_s(switch_features)
+            print(np.round(Bi.min().item(), 2), np.round(Bi.max().item(), 2), np.round(Bi.mean().item(), 2))
 
             # compute the next timesteps outputs
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
-            pred_desc_model = self.desc_decoder(topic_features, z0)
+            (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
+            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             if self.train_method == 'SWITCHED':
@@ -463,37 +504,70 @@ class BinaryCaptionModel(nn.Module):
         # Encode
         img_emb = self.encoder(images)
 
-        # prepare decoder initial hidden state
-        h_init = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-        h0 = self.h0_lin(h_init)
-        h0 = h0.repeat(self.lstm_layers, 1, 1)
-        c0 = self.c0_lin(h_init)
-        c0 = c0.repeat(self.lstm_layers, 1, 1)
-        hidden_state = (h0, c0)
-
         # compute sentence mixing coefficient
         pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
         z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
 
+        # prepare decoder initial hidden state
+        if self.hinit_method == 'ZEROS':
+            h0 = torch.zeros([self.lstm_layers, img_emb.shape[0], self.hidden_size], device=self.device)
+            c0 = torch.zeros([self.lstm_layers, img_emb.shape[0], self.hidden_size], device=self.device)
+        elif self.hinit_method == 'TOPICS':
+            h_init = z0.unsqueeze(0)  # seq len, batch size, emb size
+            h0 = self.h0_lin(h_init)
+            h0 = h0.repeat(self.lstm_layers, 1, 1)
+            c0 = self.c0_lin(h_init)
+            c0 = c0.repeat(self.lstm_layers, 1, 1)
+        else:
+            h0, c0 = None, None
+            exit('not a valid hinit_method. Use one of: \'ZEROS\', \'TOPICS\'.')
+        hidden_state = (h0, c0)
+
+        # create a variable for summing the past topic distributions
+        pi_sum = torch.zeros_like(pi0, device=self.device)
+
         # loop over the sequence length
         predicted_ids = []
+        pi_pasts = [torch.zeros_like(pi0, device=self.device)]
         for i in range(max_seq_length):
-            topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            # compute z_past
+            if i != 0:
+                pi_pasts.append(pi0 * 1/i * pi_sum)
+            z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
+
+            # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
+            if self.switch_feature == 'IMAGE':
+                switch_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            elif self.switch_feature == 'PAST_TOPICS':
+                switch_features = torch.cat([z_past, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            else:
+                switch_features = None
+                exit('not a valid switch_feature. Use one of: \'IMAGE\', \'PAST_TOPICS\'.')
+
+            if self.desc_feature == 'BOTH':
+                desc_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past],
+                                          dim=-1)
+            elif self.desc_feature == 'IMAGE_ONLY':
+                desc_features = torch.cat([img_emb, z0, z_past], dim=-1)
+            elif self.desc_feature == 'PAST_ONLY':
+                desc_features = torch.cat([z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past], dim=-1)
+            elif self.desc_feature == 'NEITHER':
+                desc_features = torch.cat([z0, z_past], dim=-1)
+            else:
+                desc_features = None
+                exit('not a valid switch_feature. Use one of: \'BOTH\', \'IMAGE_ONLY\', \'PAST_ONLY\', \'NEITHER\'.')
+
             # compute the switch
-            Bi = self.sigmoid_s(topic_features)
-            # s = torch.matmul(img_emb, self.weight_v) + \
-            #     torch.matmul(z0, self.weight_z) + \
-            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-            #     self.bias_switch
-            # Bi = torch.sigmoid(s)
+            Bi = self.sigmoid_s(switch_features)
             print(np.round(Bi.min().item(), 2), np.round(Bi.max().item(), 2), np.round(Bi.mean().item(), 2))
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
-            pred_desc_model = self.desc_decoder(topic_features, z0)
+            (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
+            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             input_ = torch.empty((img_emb.shape[0], self.vocab_size), device=self.device)
@@ -525,19 +599,29 @@ class BinaryCaptionModel(nn.Module):
         # Encode
         img_emb = self.encoder(images)
 
-        # prepare decoder initial hidden state
-        h_init = img_emb.unsqueeze(0)  # seq len, batch size, emb size
-        h0 = self.h0_lin(h_init)
-        h0 = h0.repeat(self.lstm_layers, beam_size, 1)
-        c0 = self.c0_lin(h_init)
-        c0 = c0.repeat(self.lstm_layers, beam_size, 1)
-        hidden_state = (h0, c0)
-
         # compute sentence mixing coefficient
         pi0 = self.softmax_alpha_0(img_emb)
 
         # compute global topic embedding
         z0 = torch.matmul(pi0, self.desc_decoder.topic_embeddings)
+
+        # prepare decoder initial hidden state
+        if self.hinit_method == 'ZEROS':
+            h0 = torch.zeros([self.lstm_layers, img_emb.shape[0]*beam_size, self.hidden_size], device=self.device)
+            c0 = torch.zeros([self.lstm_layers, img_emb.shape[0]*beam_size, self.hidden_size], device=self.device)
+        elif self.hinit_method == 'TOPICS':
+            h_init = z0.unsqueeze(0)  # seq len, batch size, emb size
+            h0 = self.h0_lin(h_init)
+            h0 = h0.repeat(self.lstm_layers, beam_size, 1)
+            c0 = self.c0_lin(h_init)
+            c0 = c0.repeat(self.lstm_layers, beam_size, 1)
+        else:
+            h0, c0 = None, None
+            exit('not a valid hinit_method. Use one of: \'ZEROS\', \'TOPICS\'.')
+        hidden_state = (h0, c0)
+
+        # create a variable for summing the past topic distributions
+        pi_sum = torch.zeros_like(pi0, device=self.device)
 
         img_emb = img_emb.repeat(beam_size, 1)
         z0 = z0.repeat(beam_size, 1)
@@ -549,32 +633,56 @@ class BinaryCaptionModel(nn.Module):
         remaining_sents = b_size  # number of samples in batch
 
         # Decode
+        pi_pasts = [torch.zeros_like(pi0, device=self.device)]
         for w_idx in range(max_seq_length):
-            topic_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            # compute z_past
+            if w_idx != 0:
+                pi_pasts.append(pi0 * 1/w_idx * pi_sum)
+            z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
+
+            # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
+            if self.switch_feature == 'IMAGE':
+                switch_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            elif self.switch_feature == 'PAST_TOPICS':
+                switch_features = torch.cat([z_past, z0, hidden_state[0].view(hidden_state[0].shape[1], -1)], dim=-1)
+            else:
+                switch_features = None
+                exit('not a valid switch_feature. Use one of: \'IMAGE\', \'PAST_TOPICS\'.')
+
+            if self.desc_feature == 'BOTH':
+                desc_features = torch.cat([img_emb, z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past],
+                                          dim=-1)
+            elif self.desc_feature == 'IMAGE_ONLY':
+                desc_features = torch.cat([img_emb, z0, z_past], dim=-1)
+            elif self.desc_feature == 'PAST_ONLY':
+                desc_features = torch.cat([z0, hidden_state[0].view(hidden_state[0].shape[1], -1), z_past], dim=-1)
+            elif self.desc_feature == 'NEITHER':
+                desc_features = torch.cat([z0, z_past], dim=-1)
+            else:
+                desc_features = None
+                exit('not a valid switch_feature. Use one of: \'BOTH\', \'IMAGE_ONLY\', \'PAST_ONLY\', \'NEITHER\'.')
             input_ = torch.stack([b.get_current_state() for b in beam if not b.done]).view(-1, 1)
 
             # the topic features are now of repeats of the batch stacked under each other. It should be
             # repeats of the sample for the remaining samples in the batch. So: [[1],[2],[1],[2]] -> [[1],[1],[2],[2]]
-            topic_features = torch.stack([topic_features[range(i, topic_features.shape[0], b_size)]
-                                          for i in range(remaining_sents)]).view(topic_features.shape[0], -1)
+            switch_features = torch.stack([switch_features[range(i, switch_features.shape[0], b_size)]
+                                          for i in range(remaining_sents)]).view(switch_features.shape[0], -1)
+            desc_features = torch.stack([desc_features[range(i, desc_features.shape[0], b_size)]
+                                         for i in range(remaining_sents)]).view(desc_features.shape[0], -1)
 
             # compute the switch
-            Bi = self.sigmoid_s(topic_features)
-            # s = torch.matmul(img_emb, self.weight_v) + \
-            #     torch.matmul(z0, self.weight_z) + \
-            #     torch.matmul(hidden_state[0].view(hidden_state[0].shape[1], -1), self.weight_h) + \
-            #     self.bias_switch
-            # Bi = torch.sigmoid(s)
+            Bi = self.sigmoid_s(switch_features)
 
             # compute the next timesteps
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
-            pred_desc_model = self.desc_decoder(topic_features, z0)
+            (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
+            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             out = pred_desc_model
             mask = torch.round(Bi).type(torch.uint8).squeeze()
-            out[mask,:] = pred_lang_model[mask, :]
+            out[mask, :] = pred_lang_model[mask, :]
             out = torch.softmax(out, dim=-1)
 
             # process lstm step in beam search
