@@ -1,6 +1,6 @@
 #PBS -qgpu
 #PBS -lnodes=1
-#PBS -lwalltime=5:00:00
+#PBS -lwalltime=10:00:00
 
 module load eb/3.7.0
 module load python/3.5.0
@@ -23,10 +23,10 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 60 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 10 --optimizer Adam --binary_train_method WEIGHTED --learning_rate 0.001
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 20 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED
 
 echo ""
 echo ""
 echo "tarring output to home"
 tar zcf $HOME/multimodal-descriptions/output_$PBS_JOBID.tar.gz output pickles
-echo "Job $PBS_JOBID, bin_wl ended at `date`" | mail $USER -s "Job $PBS_JOBID"
+echo "Job $PBS_JOBID, bin_w random_switching ended at `date`" | mail $USER -s "Job $PBS_JOBID"
