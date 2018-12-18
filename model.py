@@ -441,7 +441,7 @@ class BinaryCaptionModel(nn.Module):
             # compute z_past
             pi_pasts.append(pi_pasts[-1].clone())
             msk = count_pis != 0
-            pi_pasts[-1][msk, :] = pi0[msk, :]/count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
+            pi_pasts[-1][msk, :] = pi0[msk, :]/count_pis.unsqueeze(1)[msk, :] * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
@@ -542,7 +542,7 @@ class BinaryCaptionModel(nn.Module):
             # compute z_past
             pi_pasts.append(pi_pasts[-1].clone())
             msk = count_pis != 0
-            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
+            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis.unsqueeze(1)[msk, :] * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
@@ -649,7 +649,7 @@ class BinaryCaptionModel(nn.Module):
             # compute z_past
             pi_pasts.append(pi_pasts[-1].clone())
             msk = count_pis != 0
-            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
+            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis.unsqueeze(1)[msk, :] * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
