@@ -27,10 +27,16 @@ ls -l
 echo "run program..."
 echo ""
 
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 20 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method TOPICS --switch_feature PAST_TOPICS --desc_feature BOTH
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 20 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method ZEROS --switch_feature PAST_TOPICS --desc_feature BOTH
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 20 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method TOPICS --switch_feature IMAGE --desc_feature BOTH
-python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 20 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method ZEROS --switch_feature IMAGE --desc_feature BOTH
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method TOPICS --switch_feature PAST_TOPICS --desc_feature BOTH
+echo "run program..."
+echo ""
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method ZEROS --switch_feature PAST_TOPICS --desc_feature BOTH
+echo "run program..."
+echo ""
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method TOPICS --switch_feature IMAGE --desc_feature BOTH
+echo "run program..."
+echo ""
+python3 $HOME/multimodal-descriptions/main.py --beam_size 1 --model BINARY --dataset flickr8k --device cuda --num_workers 16 --batch_size 256 --min_epochs 0 --max_epochs 120 --patience 10 --vocab_threshold 5 --max_time 169200 --max_grad 5 --optimizer Adam --binary_train_method WEIGHTED --number_of_topics 100 --hinit_method ZEROS --switch_feature IMAGE --desc_feature BOTH
 
 echo ""
 echo ""

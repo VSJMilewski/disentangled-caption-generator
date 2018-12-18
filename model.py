@@ -436,10 +436,12 @@ class BinaryCaptionModel(nn.Module):
 
         # loop over the sequence length
         pi_pasts = [torch.zeros_like(pi0, device=self.device)]
+        count_pis = torch.zeros(img_emb.shape[0], device=self.device)
         for i in range(captions.shape[1] - 1):
             # compute z_past
-            if i != 0:
-                pi_pasts.append(pi0 * 1/i * pi_sum)
+            pi_pasts.append(pi_pasts[-1].clone())
+            msk = count_pis != 0
+            pi_pasts[-1][msk, :] = pi0[msk, :]/count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
@@ -471,21 +473,26 @@ class BinaryCaptionModel(nn.Module):
             pred_lang_model, hidden_state = self.lang_decoder(captions[:, i].unsqueeze(1), hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
             (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
-            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             if self.train_method == 'SWITCHED':
                 mask = torch.round(Bi).type(torch.uint8).squeeze()
                 predictions[mask, i, :] = pred_lang_model[mask, :]
                 predictions[1-mask, i, :] = pred_desc_model[1-mask, :]
+                pi_sum[1-mask, :] = pi_sum[1-mask, :] + pii[1-mask,:]
+                count_pis[1-mask] = count_pis[1 - mask] + 1
             # make a weighted decision, with the switch being the weight
             elif self.train_method == 'WEIGHTED':
                 predictions[:, i, :] = Bi * pred_lang_model + (1-Bi) * pred_desc_model
+                pi_sum = pi_sum + (1-Bi)*pii
+                count_pis = count_pis + 1
             # return both predictions, to compute loss for both
             elif self.train_method == 'WEIGHTED_LOSS':
                 predictions[0][:, i, :] = pred_lang_model
                 predictions[1][:, i, :] = pred_desc_model
                 predictions[2][:, i] = Bi.squeeze()
+                pi_sum = pi_sum + (1-Bi)*pii
+                count_pis = count_pis + 1
             else:
                 exit('Unknown train method {}. Use either SWITCHED, WEIGHTED, '
                      'or WEIGHTED_LOSS'.format(self.train_method))
@@ -530,10 +537,12 @@ class BinaryCaptionModel(nn.Module):
         # loop over the sequence length
         predicted_ids = []
         pi_pasts = [torch.zeros_like(pi0, device=self.device)]
+        count_pis = torch.zeros(img_emb.shape[0], device=self.device)
         for i in range(max_seq_length):
             # compute z_past
-            if i != 0:
-                pi_pasts.append(pi0 * 1/i * pi_sum)
+            pi_pasts.append(pi_pasts[-1].clone())
+            msk = count_pis != 0
+            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
@@ -566,7 +575,6 @@ class BinaryCaptionModel(nn.Module):
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
             (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
-            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             input_ = torch.empty((img_emb.shape[0], self.vocab_size), device=self.device)
@@ -576,6 +584,9 @@ class BinaryCaptionModel(nn.Module):
             input_ = torch.argmax(input_, dim=-1)
             input_ = input_.unsqueeze(1)
             predicted_ids.append(input_.clone())
+            #update the past pis
+            pi_sum[1 - mask, :] = pi_sum[1 - mask, :] + pii[1 - mask, :]
+            count_pis[1 - mask] = count_pis[1 - mask] + 1
         # now derive the sentences
         predicted_ids = torch.cat(predicted_ids, 1)
         return predicted_ids
@@ -633,10 +644,12 @@ class BinaryCaptionModel(nn.Module):
 
         # Decode
         pi_pasts = [torch.zeros_like(pi0, device=self.device)]
+        count_pis = torch.zeros(img_emb.shape[0], device=self.device)
         for w_idx in range(max_seq_length):
             # compute z_past
-            if w_idx != 0:
-                pi_pasts.append(pi0 * 1/w_idx * pi_sum)
+            pi_pasts.append(pi_pasts[-1].clone())
+            msk = count_pis != 0
+            pi_pasts[-1][msk, :] = pi0[msk, :] / count_pis[msk].unsqueeze(1) * pi_sum[msk, :]
             z_past = torch.matmul(pi_pasts[-1], self.desc_decoder.topic_embeddings)
 
             # concatenate the image, the topic embeddings and the last hidden state to get the feature vectors
@@ -676,13 +689,15 @@ class BinaryCaptionModel(nn.Module):
             pred_lang_model, hidden_state = self.lang_decoder(input_, hidden_state)
             pred_lang_model = pred_lang_model.squeeze(1)
             (pred_desc_model, pii) = self.desc_decoder(desc_features, z0)
-            pi_sum = pi_sum + pii
 
             # select which prediction to use based on the switch
             out = pred_desc_model
             mask = torch.round(Bi).type(torch.uint8).squeeze()
             out[mask, :] = pred_lang_model[mask, :]
             out = torch.softmax(out, dim=-1)
+            # update pi pasts
+            pi_sum[1 - mask, :] = pi_sum[1 - mask, :] + pii[1 - mask, :]
+            count_pis[1 - mask] = count_pis[1 - mask] + 1
 
             # process lstm step in beam search
             word_lk = out.view(beam_size, remaining_sents, -1).transpose(0, 1).contiguous()

@@ -284,9 +284,9 @@ if __name__ == "__main__":
     parser.add_argument('--hinit_method', type=str, default='ZEROS', help='how to train init the LSTM: '
                                                                           'ZEROS, TOPICS')
     parser.add_argument('--switch_feature', type=str, default='IMAGE', help='Which set of features to use for switch: '
-                                                                       'IMAGE, PAST_TOPICS')
+                                                                            'IMAGE, PAST_TOPICS')
     parser.add_argument('--desc_feature', type=str, default='BOTH', help='Which set of features to use for desc_dec: '
-                                                                     'BOTH, IMAGE_ONLY, PAST_ONLY, NEITHER')
+                                                                         'BOTH, IMAGE_ONLY, PAST_ONLY, NEITHER')
     parser.add_argument('--dataset', type=str, default='flickr8k', help='flickr8k, flickr30k, coco(not ready yet)')
     parser.add_argument('--device', type=str, default='cuda', help='On which device to run, cpu, cuda or None')
     parser.add_argument('--num_workers', type=int, default=0, help='On how many devices to run, for more GPUs. '
